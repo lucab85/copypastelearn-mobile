@@ -13,9 +13,11 @@ import {
 } from "react-native";
 import { Video, ResizeMode, type AVPlaybackStatus } from "expo-av";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { useApiClient } from "../../../src/services/apiClient";
 
 const SAVE_INTERVAL_MS = 10_000;
+const BUFFERING_DEBOUNCE_MS = 500;
 const PLAYBACK_RATES = [1, 1.25, 1.5, 1.75, 2];
 
 function formatTime(seconds: number): string {
@@ -39,10 +41,17 @@ export default function LessonPlayerScreen() {
   const isPlayingRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setInterval>>();
   const hasCompletedRef = useRef(false);
+  const bufferingTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const tokenRetryRef = useRef(false);
 
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [resumePosition, setResumePosition] = useState(0);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [isLandscape, setIsLandscape] = useState(false);
+  const [showCompletion, setShowCompletion] = useState(false);
+  const [orientationSupported, setOrientationSupported] = useState(true);
 
   const { data: lesson, isLoading, error, refetch } = useQuery({
     queryKey: ["lesson", courseSlug, lessonSlug],
@@ -57,8 +66,23 @@ export default function LessonPlayerScreen() {
     queryKey: ["mux-tokens", lesson?.videoPlaybackId],
     queryFn: () => api.getMuxTokens(lesson!.videoPlaybackId!),
     enabled: !!lesson?.videoPlaybackId,
-    staleTime: 1000 * 60 * 90, // Refetch before 2h expiry
+    staleTime: 1000 * 60 * 90,
   });
+
+  // Check orientation support
+  useEffect(() => {
+    ScreenOrientation.getOrientationAsync().catch(() => {
+      setOrientationSupported(false);
+    });
+  }, []);
+
+  // Unlock orientation on unmount
+  useEffect(() => {
+    return () => {
+      ScreenOrientation.unlockAsync().catch(() => {});
+      deactivateKeepAwake();
+    };
+  }, []);
 
   // Show resume prompt if there's saved progress > 10s
   useEffect(() => {
@@ -68,10 +92,9 @@ export default function LessonPlayerScreen() {
     }
   }, [lesson]);
 
-  // Save current position to backend (only when playing)
   const savePosition = useCallback(async () => {
     if (!lesson) return;
-    if (!isPlayingRef.current) return; // Don't save when paused
+    if (!isPlayingRef.current) return;
     const pos = currentPositionRef.current;
     if (Math.abs(pos - lastSavedPositionRef.current) < 2) return;
     lastSavedPositionRef.current = pos;
@@ -82,7 +105,6 @@ export default function LessonPlayerScreen() {
     }
   }, [lesson, api]);
 
-  // Periodic save timer
   useEffect(() => {
     saveTimerRef.current = setInterval(savePosition, SAVE_INTERVAL_MS);
     return () => {
@@ -91,7 +113,6 @@ export default function LessonPlayerScreen() {
     };
   }, [savePosition]);
 
-  // Save on app background + keep screen awake during playback
   useEffect(() => {
     const handleAppState = (state: AppStateStatus) => {
       if (state === "background" || state === "inactive") {
@@ -100,38 +121,57 @@ export default function LessonPlayerScreen() {
       }
     };
     const sub = AppState.addEventListener("change", handleAppState);
-    return () => {
-      sub.remove();
-      deactivateKeepAwake();
-    };
+    return () => sub.remove();
   }, [savePosition]);
 
   const handlePlaybackStatusUpdate = async (status: AVPlaybackStatus) => {
     if (!status.isLoaded) {
-      // Handle token expiry errors — refetch tokens and retry
       if (status.error) {
-        console.warn("Playback error:", status.error);
-        refetchTokens();
+        // Auto-retry token refresh once
+        if (!tokenRetryRef.current) {
+          tokenRetryRef.current = true;
+          refetchTokens();
+          return;
+        }
+        setVideoError(status.error);
       }
       return;
     }
 
+    // Reset token retry on successful load
+    tokenRetryRef.current = false;
+    setVideoError(null);
+
     currentPositionRef.current = (status.positionMillis ?? 0) / 1000;
     isPlayingRef.current = status.isPlaying;
 
-    // Keep screen awake while playing
+    // Buffering indicator with debounce
+    if (status.isBuffering && status.isPlaying) {
+      if (!bufferingTimerRef.current) {
+        bufferingTimerRef.current = setTimeout(() => {
+          setIsBuffering(true);
+        }, BUFFERING_DEBOUNCE_MS);
+      }
+    } else {
+      if (bufferingTimerRef.current) {
+        clearTimeout(bufferingTimerRef.current);
+        bufferingTimerRef.current = undefined;
+      }
+      setIsBuffering(false);
+    }
+
     if (status.isPlaying) {
       activateKeepAwakeAsync().catch(() => {});
     } else {
       deactivateKeepAwake();
-      // Save on pause
       savePosition();
     }
 
-    // Mark complete when video finishes
+    // Completion
     if (status.didJustFinish && !hasCompletedRef.current && lesson) {
       hasCompletedRef.current = true;
       deactivateKeepAwake();
+      setShowCompletion(true);
       try {
         await api.markLessonComplete(lesson.id);
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -159,10 +199,46 @@ export default function LessonPlayerScreen() {
     videoRef.current?.setRateAsync(nextRate, true);
   };
 
+  const toggleOrientation = async () => {
+    try {
+      if (isLandscape) {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        setIsLandscape(false);
+      } else {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        setIsLandscape(true);
+      }
+    } catch {
+      setOrientationSupported(false);
+    }
+  };
+
+  const handleRetryVideo = () => {
+    setVideoError(null);
+    tokenRetryRef.current = false;
+    refetchTokens();
+  };
+
+  const handleWatchAgain = () => {
+    setShowCompletion(false);
+    hasCompletedRef.current = false;
+    videoRef.current?.setPositionAsync(0);
+    videoRef.current?.playAsync();
+  };
+
+  const handleNextLesson = () => {
+    if (lesson?.nextLesson) {
+      savePosition();
+      ScreenOrientation.unlockAsync().catch(() => {});
+      router.replace(`/lesson/${courseSlug}/${lesson.nextLesson.slug}`);
+    }
+  };
+
   if (isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#2563eb" />
+        <Text style={styles.loadingText}>Loading lesson...</Text>
       </View>
     );
   }
@@ -170,6 +246,7 @@ export default function LessonPlayerScreen() {
   if (error || !lesson) {
     return (
       <View style={styles.center}>
+        <Text style={styles.errorIcon}>⚠️</Text>
         <Text style={styles.errorText}>Failed to load lesson</Text>
         <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
           <Text style={styles.retryText}>Retry</Text>
@@ -178,7 +255,6 @@ export default function LessonPlayerScreen() {
     );
   }
 
-  // Build video URI
   let videoUri: string | null = null;
   if (lesson.videoPlaybackId) {
     if (muxTokens?.signed && muxTokens.playback) {
@@ -197,17 +273,39 @@ export default function LessonPlayerScreen() {
           <Video
             ref={videoRef}
             source={{ uri: videoUri }}
-            style={styles.video}
+            style={[styles.video, isLandscape && styles.videoLandscape]}
             useNativeControls
             resizeMode={ResizeMode.CONTAIN}
-            shouldPlay={!showResumePrompt}
+            shouldPlay={!showResumePrompt && !showCompletion}
             rate={playbackRate}
             onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-            onError={(error) => {
-              console.warn("Video error:", error);
-              refetchTokens();
+            onError={() => {
+              if (!tokenRetryRef.current) {
+                tokenRetryRef.current = true;
+                refetchTokens();
+              } else {
+                setVideoError("Video playback failed");
+              }
             }}
           />
+
+          {/* Buffering overlay */}
+          {isBuffering && !videoError && !showResumePrompt && !showCompletion && (
+            <View style={styles.bufferingOverlay}>
+              <ActivityIndicator size="large" color="#fff" />
+            </View>
+          )}
+
+          {/* Video error overlay */}
+          {videoError && (
+            <View style={styles.errorOverlay}>
+              <Text style={styles.errorOverlayIcon}>⚠️</Text>
+              <Text style={styles.errorOverlayText}>Video failed to load</Text>
+              <TouchableOpacity style={styles.retryVideoButton} onPress={handleRetryVideo}>
+                <Text style={styles.retryVideoText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Resume prompt overlay */}
           {showResumePrompt && (
@@ -228,22 +326,56 @@ export default function LessonPlayerScreen() {
                   onPress={handleResume}
                   accessibilityLabel={`Resume from ${formatTime(resumePosition)}`}
                 >
-                  <Text style={[styles.resumeButtonText, styles.resumeButtonPrimaryText]}>
-                    Resume
-                  </Text>
+                  <Text style={[styles.resumeButtonText, styles.whiteText]}>Resume</Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
-          {/* Playback speed control */}
-          <TouchableOpacity
-            style={styles.speedButton}
-            onPress={cyclePlaybackRate}
-            accessibilityLabel={`Playback speed ${playbackRate}x`}
-          >
-            <Text style={styles.speedText}>{playbackRate}x</Text>
-          </TouchableOpacity>
+          {/* Completion overlay */}
+          {showCompletion && (
+            <View style={styles.completionOverlay}>
+              <Text style={styles.completionEmoji}>🎉</Text>
+              <Text style={styles.completionTitle}>Lesson Complete!</Text>
+              <Text style={styles.completionCheck}>✓</Text>
+              <View style={styles.completionButtons}>
+                <TouchableOpacity style={styles.completionBtn} onPress={handleWatchAgain}>
+                  <Text style={styles.completionBtnText}>Watch Again</Text>
+                </TouchableOpacity>
+                {lesson.nextLesson && (
+                  <TouchableOpacity
+                    style={[styles.completionBtn, styles.completionBtnPrimary]}
+                    onPress={handleNextLesson}
+                  >
+                    <Text style={[styles.completionBtnText, styles.whiteText]}>
+                      Next: {lesson.nextLesson.title}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          )}
+
+          {/* Controls bar */}
+          <View style={styles.controlsBar}>
+            <TouchableOpacity
+              style={styles.controlButton}
+              onPress={cyclePlaybackRate}
+              accessibilityLabel={`Playback speed ${playbackRate}x`}
+            >
+              <Text style={styles.controlText}>{playbackRate}x</Text>
+            </TouchableOpacity>
+
+            {orientationSupported && (
+              <TouchableOpacity
+                style={styles.controlButton}
+                onPress={toggleOrientation}
+                accessibilityLabel={isLandscape ? "Exit fullscreen" : "Enter fullscreen"}
+              >
+                <Text style={styles.controlText}>{isLandscape ? "↙️" : "↗️"}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       ) : (
         <View style={styles.noVideo}>
@@ -251,62 +383,62 @@ export default function LessonPlayerScreen() {
         </View>
       )}
 
-      <ScrollView style={styles.content}>
-        <Text style={styles.title}>{lesson.title}</Text>
+      {!isLandscape && (
+        <ScrollView style={styles.content}>
+          <Text style={styles.title}>{lesson.title}</Text>
 
-        {lesson.userProgress?.completed && (
-          <View style={styles.completedBanner}>
-            <Text style={styles.completedText}>✓ Completed</Text>
-          </View>
-        )}
-
-        {lesson.transcript && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Transcript</Text>
-            <Text style={styles.transcript}>{lesson.transcript}</Text>
-          </View>
-        )}
-
-        {lesson.resources && lesson.resources.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Resources</Text>
-            {lesson.resources.map((r, i) => (
-              <Text key={i} style={styles.resourceLink}>
-                • {r.title}
-              </Text>
-            ))}
-          </View>
-        )}
-
-        <View style={styles.navButtons}>
-          {lesson.previousLesson && (
-            <TouchableOpacity
-              style={styles.navButton}
-              onPress={() => {
-                savePosition();
-                router.replace(`/lesson/${courseSlug}/${lesson.previousLesson!.slug}`);
-              }}
-              accessibilityLabel={`Previous: ${lesson.previousLesson.title}`}
-            >
-              <Text style={styles.navButtonText}>← Previous</Text>
-            </TouchableOpacity>
+          {lesson.userProgress?.completed && !showCompletion && (
+            <View style={styles.completedBanner}>
+              <Text style={styles.completedText}>✓ Completed</Text>
+            </View>
           )}
-          {lesson.nextLesson && (
-            <TouchableOpacity
-              style={[styles.navButton, styles.navButtonPrimary]}
-              onPress={() => {
-                savePosition();
-                router.replace(`/lesson/${courseSlug}/${lesson.nextLesson!.slug}`);
-              }}
-              accessibilityLabel={`Next: ${lesson.nextLesson.title}`}
-            >
-              <Text style={[styles.navButtonText, styles.navButtonPrimaryText]}>
-                Next →
-              </Text>
-            </TouchableOpacity>
+
+          {lesson.transcript && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Transcript</Text>
+              <Text style={styles.transcript}>{lesson.transcript}</Text>
+            </View>
           )}
-        </View>
-      </ScrollView>
+
+          {lesson.resources && lesson.resources.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Resources</Text>
+              {lesson.resources.map((r, i) => (
+                <Text key={i} style={styles.resourceLink}>• {r.title}</Text>
+              ))}
+            </View>
+          )}
+
+          <View style={styles.navButtons}>
+            {lesson.previousLesson && (
+              <TouchableOpacity
+                style={styles.navButton}
+                onPress={() => {
+                  savePosition();
+                  ScreenOrientation.unlockAsync().catch(() => {});
+                  router.replace(`/lesson/${courseSlug}/${lesson.previousLesson!.slug}`);
+                }}
+                accessibilityLabel={`Previous: ${lesson.previousLesson.title}`}
+              >
+                <Text style={styles.navButtonText}>← Previous</Text>
+              </TouchableOpacity>
+            )}
+            {lesson.nextLesson && (
+              <TouchableOpacity
+                style={[styles.navButton, styles.navButtonPrimary]}
+                onPress={() => {
+                  savePosition();
+                  ScreenOrientation.unlockAsync().catch(() => {});
+                  router.replace(`/lesson/${courseSlug}/${lesson.nextLesson!.slug}`);
+                }}
+                accessibilityLabel={`Next: ${lesson.nextLesson.title}`}
+              >
+                <Text style={[styles.navButtonText, styles.whiteText]}>Next →</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -314,16 +446,37 @@ export default function LessonPlayerScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" },
+  loadingText: { marginTop: 12, fontSize: 14, color: "#6b7280" },
   video: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
+  videoLandscape: { aspectRatio: undefined, flex: 1, width: "100%", height: "100%" },
   noVideo: {
     width: "100%", aspectRatio: 16 / 9, backgroundColor: "#1a1a1a",
     justifyContent: "center", alignItems: "center",
   },
   noVideoText: { color: "#666", fontSize: 16 },
+
+  // Buffering
+  bufferingOverlay: {
+    ...StyleSheet.absoluteFillObject, aspectRatio: 16 / 9,
+    backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", alignItems: "center",
+  },
+
+  // Error
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject, aspectRatio: 16 / 9,
+    backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", alignItems: "center",
+  },
+  errorOverlayIcon: { fontSize: 40, marginBottom: 12 },
+  errorOverlayText: { color: "#fff", fontSize: 16, fontWeight: "600", marginBottom: 16 },
+  retryVideoButton: {
+    paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, backgroundColor: "#2563eb",
+  },
+  retryVideoText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+
+  // Resume
   resumeOverlay: {
-    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+    ...StyleSheet.absoluteFillObject, aspectRatio: 16 / 9,
     backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", alignItems: "center",
-    aspectRatio: 16 / 9,
   },
   resumeText: { color: "#fff", fontSize: 18, fontWeight: "600", marginBottom: 16 },
   resumeButtons: { flexDirection: "row", gap: 12 },
@@ -333,13 +486,37 @@ const styles = StyleSheet.create({
   },
   resumeButtonPrimary: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
   resumeButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
-  resumeButtonPrimaryText: { color: "#fff" },
-  speedButton: {
-    position: "absolute", bottom: 8, right: 8,
-    backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 6,
-    paddingHorizontal: 10, paddingVertical: 4,
+
+  // Completion
+  completionOverlay: {
+    ...StyleSheet.absoluteFillObject, aspectRatio: 16 / 9,
+    backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", alignItems: "center",
   },
-  speedText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  completionEmoji: { fontSize: 48, marginBottom: 8 },
+  completionTitle: { color: "#fff", fontSize: 22, fontWeight: "700", marginBottom: 4 },
+  completionCheck: { color: "#16a34a", fontSize: 36, fontWeight: "700", marginBottom: 20 },
+  completionButtons: { gap: 10, alignItems: "center", width: "80%" },
+  completionBtn: {
+    paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10,
+    borderWidth: 1, borderColor: "#fff", width: "100%", alignItems: "center",
+  },
+  completionBtnPrimary: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+  completionBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+
+  // Controls bar
+  controlsBar: {
+    flexDirection: "row", justifyContent: "flex-end", gap: 8,
+    paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#111",
+  },
+  controlButton: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  controlText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+
+  whiteText: { color: "#fff" },
+
+  // Content
   content: { flex: 1, backgroundColor: "#fff", padding: 16 },
   title: { fontSize: 20, fontWeight: "700", color: "#1a1a1a", marginBottom: 12 },
   completedBanner: {
@@ -360,7 +537,7 @@ const styles = StyleSheet.create({
   },
   navButtonPrimary: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
   navButtonText: { fontSize: 15, fontWeight: "600", color: "#1a1a1a" },
-  navButtonPrimaryText: { color: "#fff" },
+  errorIcon: { fontSize: 40, marginBottom: 12 },
   errorText: { fontSize: 16, color: "#dc2626", marginBottom: 12 },
   retryButton: { padding: 12 },
   retryText: { color: "#2563eb", fontSize: 16, fontWeight: "600" },
