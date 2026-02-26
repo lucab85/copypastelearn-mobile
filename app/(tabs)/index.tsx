@@ -8,7 +8,6 @@ import {
   ScrollView,
   RefreshControl,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,8 +15,10 @@ import { useApiClient } from "../../../src/services/apiClient";
 import { SkeletonDashboard } from "../../../src/components/SkeletonBox";
 import { HeroCard } from "../../../src/components/HeroCard";
 import { CourseCard } from "../../../src/components/CourseCard";
+import { ProgressBar } from "../../../src/components/ProgressBar";
 import { AnalyticsEvent, track } from "../../../src/services/analytics";
 import { colors, typography, spacing, radii, shadows, getGreeting } from "../../../src/theme";
+import type { DashboardData, DashboardCourse } from "../../../src/services/types";
 
 export default function DashboardScreen() {
   const api = useApiClient();
@@ -35,132 +36,178 @@ export default function DashboardScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["top"]}>
         <SkeletonDashboard />
-      </View>
+      </SafeAreaView>
     );
   }
 
-  const firstName = user?.firstName ?? "there";
-  const coursesInProgress = data?.coursesInProgress ?? [];
-  const completedCourses = data?.completedCourses ?? [];
-  const continueLesson = data?.continueLesson;
+  const firstName = data?.userName ?? user?.firstName ?? "there";
+  const inProgress = data?.inProgressCourses ?? [];
+  const completed = data?.completedCourses ?? [];
+  const recentLessons = data?.recentLessons ?? [];
+  const totalCompleted = data?.totalLessonsCompleted ?? 0;
+
+  // Find the most recently accessed in-progress course with a next lesson
+  const continueCourse = inProgress.find((c) => c.nextLesson);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
-      }
-    >
-      {/* Greeting */}
-      <View style={styles.greetingSection}>
-        <Text style={styles.greeting}>{getGreeting()}, {firstName} 👋</Text>
-        <Text style={styles.subtitle}>
-          {coursesInProgress.length > 0
-            ? `${coursesInProgress.length} course${coursesInProgress.length > 1 ? "s" : ""} in progress`
-            : "Ready to start learning?"}
-        </Text>
-      </View>
-
-      {/* Continue Learning Hero */}
-      {continueLesson && (
-        <View style={styles.section}>
-          <HeroCard
-            courseTitle={continueLesson.courseTitle}
-            lessonTitle={continueLesson.lessonTitle}
-            courseSlug={continueLesson.courseSlug}
-            lessonSlug={continueLesson.lessonSlug}
-            imageUrl={continueLesson.imageUrl}
-            progress={continueLesson.progress ?? 0}
-            onPress={() => router.push(`/lesson/${continueLesson.courseSlug}/${continueLesson.lessonSlug}`)}
-          />
-        </View>
-      )}
-
-      {/* Stats Row */}
-      <View style={styles.statsRow}>
-        <View style={[styles.statCard, shadows.subtle]}>
-          <Text style={styles.statNumber}>{coursesInProgress.length}</Text>
-          <Text style={styles.statLabel}>In Progress</Text>
-        </View>
-        <View style={[styles.statCard, shadows.subtle]}>
-          <Text style={styles.statNumber}>{completedCourses.length}</Text>
-          <Text style={styles.statLabel}>Completed</Text>
-        </View>
-        <View style={[styles.statCard, shadows.subtle]}>
-          <Text style={styles.statNumber}>
-            {coursesInProgress.length + completedCourses.length}
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
+        }
+      >
+        {/* Greeting */}
+        <View style={styles.greetingSection}>
+          <Text style={styles.greeting}>{getGreeting()}, {firstName} 👋</Text>
+          <Text style={styles.subtitle}>
+            {inProgress.length > 0
+              ? `${inProgress.length} course${inProgress.length > 1 ? "s" : ""} in progress`
+              : totalCompleted > 0
+              ? `${totalCompleted} lessons completed 🎉`
+              : "Ready to start learning?"}
           </Text>
-          <Text style={styles.statLabel}>Total</Text>
         </View>
-      </View>
 
-      {/* In Progress Section */}
-      {coursesInProgress.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>In Progress</Text>
-            <TouchableOpacity onPress={() => router.push("/catalog")}>
-              <Text style={styles.seeAll}>See All</Text>
+        {/* Continue Learning Hero */}
+        {continueCourse && continueCourse.nextLesson && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>CONTINUE LEARNING</Text>
+            <HeroCard
+              courseTitle={continueCourse.title}
+              lessonTitle={continueCourse.nextLesson.title}
+              courseSlug={continueCourse.slug}
+              lessonSlug={continueCourse.nextLesson.slug}
+              imageUrl={continueCourse.thumbnailUrl}
+              progress={continueCourse.percentComplete}
+              onPress={() => router.push(`/lesson/${continueCourse.slug}/${continueCourse.nextLesson!.slug}`)}
+            />
+          </View>
+        )}
+
+        {/* Stats Row */}
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, shadows.subtle]}>
+            <Text style={styles.statNumber}>{inProgress.length}</Text>
+            <Text style={styles.statLabel}>In Progress</Text>
+          </View>
+          <View style={[styles.statCard, shadows.subtle]}>
+            <Text style={styles.statNumber}>{completed.length}</Text>
+            <Text style={styles.statLabel}>Completed</Text>
+          </View>
+          <View style={[styles.statCard, shadows.subtle]}>
+            <Text style={styles.statNumber}>{totalCompleted}</Text>
+            <Text style={styles.statLabel}>Lessons Done</Text>
+          </View>
+        </View>
+
+        {/* Recent Activity */}
+        {recentLessons.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>📖 Recent Activity</Text>
+            {recentLessons.slice(0, 5).map((lesson) => (
+              <TouchableOpacity
+                key={lesson.lessonId}
+                style={[styles.recentCard, shadows.subtle]}
+                onPress={() => router.push(`/lesson/${lesson.courseSlug}/${lesson.slug}`)}
+                accessibilityLabel={`${lesson.title} from ${lesson.courseTitle}`}
+              >
+                <View style={styles.recentInfo}>
+                  <Text style={styles.recentTitle} numberOfLines={1}>{lesson.title}</Text>
+                  <Text style={styles.recentCourse} numberOfLines={1}>{lesson.courseTitle}</Text>
+                </View>
+                {lesson.completed ? (
+                  <Text style={styles.recentDone}>✓</Text>
+                ) : (
+                  <Text style={styles.recentArrow}>›</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* In Progress Courses */}
+        {inProgress.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>📚 In Progress</Text>
+              <TouchableOpacity onPress={() => router.push("/catalog")}>
+                <Text style={styles.seeAll}>See All</Text>
+              </TouchableOpacity>
+            </View>
+            {inProgress.map((course: DashboardCourse) => (
+              <TouchableOpacity
+                key={course.courseId}
+                style={[styles.courseRow, shadows.subtle]}
+                onPress={() => router.push(`/catalog/${course.slug}`)}
+                accessibilityLabel={`${course.title}, ${Math.round(course.percentComplete)}% complete`}
+              >
+                <View style={styles.courseRowInfo}>
+                  <Text style={styles.courseRowTitle} numberOfLines={1}>{course.title}</Text>
+                  <View style={styles.courseRowMeta}>
+                    <ProgressBar progress={course.percentComplete} height={4} />
+                    <Text style={styles.courseRowPercent}>{Math.round(course.percentComplete)}%</Text>
+                  </View>
+                </View>
+                <Text style={styles.recentArrow}>›</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Completed Courses */}
+        {completed.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>✅ Completed</Text>
+            {completed.map((course: DashboardCourse) => (
+              <TouchableOpacity
+                key={course.courseId}
+                style={[styles.courseRow, shadows.subtle]}
+                onPress={() => router.push(`/catalog/${course.slug}`)}
+                accessibilityLabel={`${course.title}, completed`}
+              >
+                <View style={styles.courseRowInfo}>
+                  <Text style={styles.courseRowTitle} numberOfLines={1}>{course.title}</Text>
+                  <Text style={styles.courseRowDate}>
+                    {course.completedAt
+                      ? new Date(course.completedAt).toLocaleDateString()
+                      : "Completed"}
+                  </Text>
+                </View>
+                <Text style={styles.completedCheck}>✓</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Empty State */}
+        {inProgress.length === 0 && completed.length === 0 && recentLessons.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyEmoji}>🎓</Text>
+            <Text style={styles.emptyTitle}>Start Your Journey</Text>
+            <Text style={styles.emptySubtitle}>
+              Browse our courses and begin learning today
+            </Text>
+            <TouchableOpacity
+              style={styles.browseCta}
+              onPress={() => router.push("/catalog")}
+              accessibilityLabel="Browse courses"
+            >
+              <Text style={styles.browseCtaText}>Browse Courses →</Text>
             </TouchableOpacity>
           </View>
-          {coursesInProgress.map((course: any) => (
-            <CourseCard
-              key={course.id}
-              title={course.title}
-              slug={course.slug}
-              lessonCount={course.lessonCount}
-              imageUrl={course.imageUrl}
-              progress={course.progress}
-              onPress={() => router.push(`/catalog/${course.slug}`)}
-            />
-          ))}
-        </View>
-      )}
-
-      {/* Completed Section */}
-      {completedCourses.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>✅ Completed</Text>
-          {completedCourses.map((course: any) => (
-            <CourseCard
-              key={course.id}
-              title={course.title}
-              slug={course.slug}
-              lessonCount={course.lessonCount}
-              imageUrl={course.imageUrl}
-              progress={100}
-              onPress={() => router.push(`/catalog/${course.slug}`)}
-            />
-          ))}
-        </View>
-      )}
-
-      {/* Empty State */}
-      {coursesInProgress.length === 0 && completedCourses.length === 0 && !continueLesson && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyEmoji}>🎓</Text>
-          <Text style={styles.emptyTitle}>Start Your Journey</Text>
-          <Text style={styles.emptySubtitle}>Browse courses and start learning today</Text>
-          <TouchableOpacity
-            style={styles.browseCta}
-            onPress={() => router.push("/catalog")}
-            accessibilityLabel="Browse courses"
-          >
-            <Text style={styles.browseCtaText}>Browse Courses</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </ScrollView>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1 },
   content: { paddingHorizontal: spacing.md, paddingBottom: spacing.xxl },
 
   greetingSection: { paddingTop: spacing.lg, marginBottom: spacing.lg },
@@ -168,7 +215,8 @@ const styles = StyleSheet.create({
   subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.xs },
 
   section: { marginBottom: spacing.lg },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.md },
+  sectionLabel: { ...typography.captionSm, color: colors.accent, marginBottom: spacing.sm },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.sm },
   sectionTitle: { ...typography.h3, color: colors.text },
   seeAll: { ...typography.buttonSm, color: colors.primary },
 
@@ -189,17 +237,53 @@ const styles = StyleSheet.create({
   statNumber: { ...typography.h2, color: colors.primary },
   statLabel: { ...typography.caption, color: colors.textTertiary, marginTop: 2 },
 
+  // Recent activity
+  recentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  recentInfo: { flex: 1 },
+  recentTitle: { ...typography.bodyMedium, color: colors.text },
+  recentCourse: { ...typography.bodySm, color: colors.textTertiary, marginTop: 2 },
+  recentDone: { fontSize: 16, color: colors.success, fontWeight: "700" },
+  recentArrow: { fontSize: 24, color: colors.textTertiary },
+
+  // Course rows
+  courseRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  courseRowInfo: { flex: 1 },
+  courseRowTitle: { ...typography.bodyMedium, color: colors.text, marginBottom: spacing.xs },
+  courseRowMeta: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  courseRowPercent: { ...typography.caption, color: colors.textSecondary, width: 36, textAlign: "right" },
+  courseRowDate: { ...typography.bodySm, color: colors.textTertiary },
+  completedCheck: { fontSize: 18, color: colors.success, fontWeight: "700", marginLeft: spacing.sm },
+
+  // Empty state
   emptyState: {
     alignItems: "center",
     paddingVertical: spacing.xxl,
   },
   emptyEmoji: { fontSize: 64, marginBottom: spacing.md },
   emptyTitle: { ...typography.h2, color: colors.text, marginBottom: spacing.sm },
-  emptySubtitle: { ...typography.body, color: colors.textSecondary, textAlign: "center", marginBottom: spacing.lg },
+  emptySubtitle: { ...typography.body, color: colors.textSecondary, textAlign: "center", marginBottom: spacing.lg, paddingHorizontal: spacing.xl },
   browseCta: {
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
+    paddingVertical: 14,
     borderRadius: radii.md,
   },
   browseCtaText: { ...typography.button, color: colors.textInverse },

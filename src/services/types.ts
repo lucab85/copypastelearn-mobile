@@ -10,6 +10,10 @@ export interface CourseListItem {
   difficulty: Difficulty;
   lessonCount: number;
   thumbnailUrl: string | null;
+  imageUrl?: string | null;
+  category?: string;
+  isFree?: boolean;
+  progress?: number;
   userProgress?: { percentComplete: number } | null;
 }
 
@@ -23,6 +27,7 @@ export interface CourseDetail {
   difficulty: Difficulty;
   estimatedDuration: number | null;
   thumbnailUrl: string | null;
+  instructor?: string | null;
   lessons: LessonSummary[];
   userProgress?: CourseProgressInfo | null;
 }
