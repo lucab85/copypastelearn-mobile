@@ -11,6 +11,8 @@ import {
   Switch,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { colors, typography, spacing, radii } from "../../src/theme";
+import { hapticLight } from "../../src/services/haptics";
 
 const AUTOPLAY_KEY = "settings:autoplay";
 
@@ -27,6 +29,7 @@ export default function SettingsScreen() {
 
   const toggleAutoplay = (value: boolean) => {
     setAutoplayEnabled(value);
+    hapticLight();
     AsyncStorage.setItem(AUTOPLAY_KEY, String(value));
   };
 

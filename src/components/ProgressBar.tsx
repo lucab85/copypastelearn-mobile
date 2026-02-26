@@ -1,19 +1,32 @@
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, type ViewStyle } from "react-native";
+import { colors, radii } from "../theme";
 
 interface ProgressBarProps {
-  percent: number;
+  /** 0-100 */
+  progress?: number;
+  /** @deprecated use progress */
+  percent?: number;
   complete?: boolean;
   height?: number;
+  color?: string;
+  style?: ViewStyle;
 }
 
-export function ProgressBar({ percent, complete, height = 4 }: ProgressBarProps) {
-  const clampedPercent = Math.min(Math.max(percent, 0), 100);
-  const color = complete || clampedPercent >= 100 ? "#16a34a" : "#2563eb";
+export function ProgressBar({
+  progress,
+  percent,
+  complete,
+  height = 4,
+  color,
+  style,
+}: ProgressBarProps) {
+  const value = Math.min(Math.max(progress ?? percent ?? 0, 0), 100);
+  const barColor = color ?? (complete || value >= 100 ? colors.success : colors.primary);
 
   return (
-    <View style={[styles.track, { height }]}>
+    <View style={[styles.track, { height }, style]}>
       <View
-        style={[styles.fill, { width: `${clampedPercent}%`, backgroundColor: color, height }]}
+        style={[styles.fill, { width: `${value}%`, backgroundColor: barColor, height }]}
       />
     </View>
   );
@@ -21,10 +34,10 @@ export function ProgressBar({ percent, complete, height = 4 }: ProgressBarProps)
 
 const styles = StyleSheet.create({
   track: {
-    backgroundColor: "#e5e7eb",
+    backgroundColor: colors.border,
     borderRadius: 2,
     overflow: "hidden",
-    width: "100%",
+    flex: 1,
   },
   fill: {
     borderRadius: 2,

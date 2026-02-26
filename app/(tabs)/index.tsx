@@ -11,6 +11,7 @@ import {
   FlatList,
   TouchableOpacity,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useApiClient } from "../../../src/services/apiClient";
 import { SkeletonDashboard } from "../../../src/components/SkeletonBox";
 import { HeroCard } from "../../../src/components/HeroCard";
@@ -46,7 +47,8 @@ export default function DashboardScreen() {
   const continueLesson = data?.continueLesson;
 
   return (
-    <ScrollView
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       refreshControl={
@@ -153,6 +155,7 @@ export default function DashboardScreen() {
         </View>
       )}
     </ScrollView>
+    </SafeAreaView>
   );
 }
 

@@ -17,6 +17,7 @@ import * as ScreenOrientation from "expo-screen-orientation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useApiClient } from "../../../src/services/apiClient";
 import { AnalyticsEvent, track } from "../../../src/services/analytics";
+import { hapticSuccess, hapticError, hapticLight } from "../../../src/services/haptics";
 
 const SAVE_INTERVAL_MS = 10_000;
 const BUFFERING_DEBOUNCE_MS = 500;
@@ -154,6 +155,7 @@ export default function LessonPlayerScreen() {
           return;
         }
         setVideoError(status.error);
+        hapticError();
       }
       return;
     }
@@ -192,6 +194,7 @@ export default function LessonPlayerScreen() {
       hasCompletedRef.current = true;
       deactivateKeepAwake();
       setShowCompletion(true);
+      hapticSuccess();
       track(AnalyticsEvent.LESSON_COMPLETE, { lessonId: lesson.id, courseSlug });
 
       // Start autoplay countdown if enabled and next lesson exists
@@ -237,6 +240,7 @@ export default function LessonPlayerScreen() {
     const currentIdx = PLAYBACK_RATES.indexOf(playbackRate);
     const nextRate = PLAYBACK_RATES[(currentIdx + 1) % PLAYBACK_RATES.length];
     setPlaybackRate(nextRate);
+    hapticLight();
     videoRef.current?.setRateAsync(nextRate, true);
   };
 

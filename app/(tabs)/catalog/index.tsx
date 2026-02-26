@@ -16,6 +16,7 @@ import { SkeletonCourseCard } from "../../../src/components/SkeletonBox";
 import { CourseCard } from "../../../src/components/CourseCard";
 import { AnalyticsEvent, track } from "../../../src/services/analytics";
 import { colors, typography, spacing, radii } from "../../../src/theme";
+import { hapticSelection } from "../../../src/services/haptics";
 import type { CourseListItem } from "../../../src/services/types";
 
 type FilterType = "all" | "in_progress" | "completed" | "free";
@@ -149,7 +150,7 @@ export default function CatalogScreen() {
                 styles.filterChip,
                 activeFilter === item.key && styles.filterChipActive,
               ]}
-              onPress={() => setActiveFilter(item.key)}
+              onPress={() => { setActiveFilter(item.key); hapticSelection(); }}
               accessibilityLabel={`Filter: ${item.label}`}
               accessibilityState={{ selected: activeFilter === item.key }}
             >
