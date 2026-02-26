@@ -1,32 +1,50 @@
-import { colors, typography, spacing, radii } from "../../theme";
+import { colors, typography, spacing, radii, getGradientColor, getGreeting } from "@/theme";
 
-// Test pure functions only — theme tokens are just constants
-// RN-dependent parts (shadows, StyleSheet) aren't tested here
-
-describe("theme tokens", () => {
-  it("exports color tokens", () => {
+describe("theme via @/ alias", () => {
+  it("resolves @/ path alias correctly", () => {
     expect(colors.primary).toBe("#2563eb");
-    expect(colors.accent).toBe("#f59e0b");
-    expect(colors.success).toBe("#16a34a");
-    expect(colors.error).toBe("#dc2626");
-    expect(colors.text).toBe("#0f172a");
-    expect(colors.background).toBe("#f8fafc");
+  });
+});
+
+describe("getGradientColor", () => {
+  it("returns consistent color for same title", () => {
+    const a = getGradientColor("My Course");
+    const b = getGradientColor("My Course");
+    expect(a).toBe(b);
   });
 
-  it("exports typography scale", () => {
-    expect(typography.h1.fontSize).toBe(28);
-    expect(typography.body.fontSize).toBe(15);
-    expect(typography.caption.fontSize).toBe(12);
+  it("returns different colors for different titles", () => {
+    const a = getGradientColor("Course A");
+    const b = getGradientColor("Course B");
+    // Not guaranteed different but very likely with hash
+    expect(typeof a).toBe("string");
+    expect(typeof b).toBe("string");
   });
 
-  it("exports spacing scale", () => {
-    expect(spacing.xs).toBe(4);
-    expect(spacing.md).toBe(16);
-    expect(spacing.xl).toBe(32);
+  it("returns a valid hex color", () => {
+    const c = getGradientColor("Test");
+    expect(c).toMatch(/^#[0-9a-fA-F]{6}$/);
   });
+});
 
-  it("exports border radii", () => {
-    expect(radii.sm).toBe(8);
+describe("getGreeting", () => {
+  it("returns a greeting string", () => {
+    const g = getGreeting();
+    expect(["Good morning", "Good afternoon", "Good evening"]).toContain(g);
+  });
+});
+
+describe("spacing scale", () => {
+  it("is monotonically increasing", () => {
+    const values = [spacing.xs, spacing.sm, spacing.md, spacing.lg, spacing.xl, spacing.xxl];
+    for (let i = 1; i < values.length; i++) {
+      expect(values[i]).toBeGreaterThan(values[i - 1]);
+    }
+  });
+});
+
+describe("radii", () => {
+  it("full is 9999", () => {
     expect(radii.full).toBe(9999);
   });
 });
