@@ -6,10 +6,11 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   RefreshControl,
 } from "react-native";
 import { useApiClient } from "../../src/services/apiClient";
+import { SkeletonDashboard } from "../../src/components/SkeletonBox";
+import { ProgressBar } from "../../src/components/ProgressBar";
 import type { DashboardCourse, RecentLesson } from "../../src/services/types";
 
 export default function HomeScreen() {
@@ -22,11 +23,7 @@ export default function HomeScreen() {
   });
 
   if (isLoading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2563eb" />
-      </View>
-    );
+    return <SkeletonDashboard />;
   }
 
   if (error) {
@@ -63,10 +60,10 @@ export default function HomeScreen() {
       accessibilityLabel={`Continue ${item.title}`}
     >
       <Text style={styles.cardTitle}>{item.title}</Text>
-      <View style={styles.progressBar}>
-        <View style={[styles.progressFill, { width: `${item.percentComplete}%` }]} />
-      </View>
-      <Text style={styles.progressText}>{Math.round(item.percentComplete)}% complete</Text>
+      <ProgressBar percent={item.percentComplete} complete={item.percentComplete >= 100} />
+      <Text style={styles.progressText}>
+        {item.percentComplete >= 100 ? "✓ Complete" : `${Math.round(item.percentComplete)}% complete`}
+      </Text>
       {item.nextLesson && (
         <Text style={styles.nextLesson}>Next: {item.nextLesson.title}</Text>
       )}
@@ -134,10 +131,6 @@ const styles = StyleSheet.create({
   },
   cardTitle: { fontSize: 16, fontWeight: "600", color: "#1a1a1a" },
   cardSubtitle: { fontSize: 12, color: "#666", marginBottom: 4 },
-  progressBar: {
-    height: 6, backgroundColor: "#e5e7eb", borderRadius: 3, marginTop: 12,
-  },
-  progressFill: { height: 6, backgroundColor: "#2563eb", borderRadius: 3 },
   progressText: { fontSize: 12, color: "#666", marginTop: 6 },
   nextLesson: { fontSize: 13, color: "#2563eb", marginTop: 8 },
   completedBadge: { fontSize: 12, color: "#16a34a", marginTop: 8 },

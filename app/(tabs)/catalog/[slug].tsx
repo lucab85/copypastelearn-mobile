@@ -6,9 +6,11 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useApiClient } from "../../../src/services/apiClient";
+import { SkeletonBox, SkeletonLessonRow } from "../../../src/components/SkeletonBox";
+import { ProgressBar } from "../../../src/components/ProgressBar";
 import type { LessonSummary } from "../../../src/services/types";
 
 export default function CourseDetailScreen() {
@@ -24,8 +26,19 @@ export default function CourseDetailScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2563eb" />
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: "Loading..." }} />
+        <View style={styles.listContent}>
+          <SkeletonBox width="70%" height={24} style={{ marginBottom: 12 }} />
+          <SkeletonBox width="90%" height={14} style={{ marginBottom: 6 }} />
+          <SkeletonBox width="80%" height={14} style={{ marginBottom: 20 }} />
+          <SkeletonBox height={6} style={{ marginBottom: 20 }} />
+          <SkeletonLessonRow />
+          <SkeletonLessonRow />
+          <SkeletonLessonRow />
+          <SkeletonLessonRow />
+          <SkeletonLessonRow />
+        </View>
       </View>
     );
   }
@@ -76,7 +89,11 @@ export default function CourseDetailScreen() {
           </Text>
           <View style={styles.lessonMeta}>
             {item.durationSeconds ? (
-              <Text style={styles.duration}>{formatDuration(item.durationSeconds)}</Text>
+              <Text style={styles.duration}>
+                {item.userProgress && !item.userProgress.completed && item.userProgress.videoPositionSeconds > 0
+                  ? `${formatDuration(item.userProgress.videoPositionSeconds)} / ${formatDuration(item.durationSeconds)}`
+                  : formatDuration(item.durationSeconds)}
+              </Text>
             ) : null}
             {item.isFree && <Text style={styles.freeBadge}>Free</Text>}
             {!item.isAccessible && <Text style={styles.lockIcon}>🔒</Text>}
@@ -94,18 +111,28 @@ export default function CourseDetailScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderLesson}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={() => refetch()}
+            tintColor="#2563eb"
+          />
+        }
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.title}>{course.title}</Text>
             <Text style={styles.description}>{course.description}</Text>
             {course.userProgress && (
-              <View style={styles.progressBar}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${course.userProgress.percentComplete}%` },
-                  ]}
+              <View style={styles.progressSection}>
+                <ProgressBar
+                  percent={course.userProgress.percentComplete}
+                  complete={course.userProgress.percentComplete >= 100}
                 />
+                <Text style={styles.progressLabel}>
+                  {course.userProgress.percentComplete >= 100
+                    ? "✓ Complete"
+                    : `${Math.round(course.userProgress.percentComplete)}% complete`}
+                </Text>
               </View>
             )}
             {course.outcomes?.length > 0 && (
@@ -135,8 +162,8 @@ const styles = StyleSheet.create({
   header: { marginBottom: 8 },
   title: { fontSize: 24, fontWeight: "700", color: "#1a1a1a", marginBottom: 8 },
   description: { fontSize: 15, color: "#666", lineHeight: 22, marginBottom: 12 },
-  progressBar: { height: 6, backgroundColor: "#e5e7eb", borderRadius: 3, marginBottom: 16 },
-  progressFill: { height: 6, backgroundColor: "#2563eb", borderRadius: 3 },
+  progressSection: { marginBottom: 16, gap: 4 },
+  progressLabel: { fontSize: 12, color: "#6b7280", fontWeight: "600" },
   section: { marginBottom: 16 },
   sectionTitle: { fontSize: 16, fontWeight: "600", color: "#1a1a1a", marginBottom: 8 },
   outcomeItem: { fontSize: 14, color: "#444", lineHeight: 22, marginLeft: 4 },

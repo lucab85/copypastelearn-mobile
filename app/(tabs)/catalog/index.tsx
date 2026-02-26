@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,134 +10,225 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Image,
 } from "react-native";
 import { useApiClient } from "../../../src/services/apiClient";
+import { useDebouncedCallback } from "../../../src/hooks/useDebouncedCallback";
+import { SkeletonCourseCard } from "../../../src/components/SkeletonBox";
+import { ProgressBar } from "../../../src/components/ProgressBar";
 import type { CourseListItem } from "../../../src/services/types";
 
-const DIFFICULTY_COLORS: Record<string, string> = {
-  BEGINNER: "#16a34a",
-  INTERMEDIATE: "#ca8a04",
-  ADVANCED: "#dc2626",
-};
+const PAGE_SIZE = 20;
 
 export default function CatalogScreen() {
   const api = useApiClient();
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const [searchText, setSearchText] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const { data: courses, isLoading, error, refetch, isRefetching } = useQuery({
+  const debouncedUpdate = useDebouncedCallback((text: string) => {
+    setDebouncedSearch(text);
+  }, 300);
+
+  const handleSearchChange = (text: string) => {
+    setSearchText(text);
+    debouncedUpdate(text);
+  };
+
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch,
+    isRefetching,
+  } = useInfiniteQuery({
     queryKey: ["courses"],
-    queryFn: api.getCourses,
+    queryFn: ({ pageParam }) =>
+      api.getCoursesPaginated(pageParam ?? undefined, PAGE_SIZE),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
   });
 
-  const filtered = courses?.filter(
-    (c) =>
-      c.title.toLowerCase().includes(search.toLowerCase()) ||
-      c.description.toLowerCase().includes(search.toLowerCase())
+  const allCourses = useMemo(
+    () => data?.pages.flatMap((p) => p.courses) ?? [],
+    [data]
   );
 
-  const renderCourse = ({ item }: { item: CourseListItem }) => (
+  const filteredCourses = useMemo(() => {
+    if (!debouncedSearch.trim()) return allCourses;
+    const q = debouncedSearch.toLowerCase();
+    return allCourses.filter(
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        c.description.toLowerCase().includes(q)
+    );
+  }, [allCourses, debouncedSearch]);
+
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage && !debouncedSearch.trim()) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, debouncedSearch]);
+
+  const handleRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  const clearSearch = () => {
+    setSearchText("");
+    setDebouncedSearch("");
+  };
+
+  const renderCourseCard = ({ item }: { item: CourseListItem }) => (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => router.push(`/(tabs)/catalog/${item.slug}`)}
-      accessibilityRole="button"
+      onPress={() => router.push(`/catalog/${item.slug}`)}
       accessibilityLabel={`${item.title}, ${item.difficulty}, ${item.lessonCount} lessons`}
+      accessibilityRole="button"
     >
-      <View style={styles.cardHeader}>
-        <Text
-          style={[
-            styles.difficulty,
-            { color: DIFFICULTY_COLORS[item.difficulty] ?? "#666" },
-          ]}
-        >
-          {item.difficulty}
-        </Text>
-        <Text style={styles.lessonCount}>{item.lessonCount} lessons</Text>
-      </View>
-      <Text style={styles.cardTitle}>{item.title}</Text>
-      <Text style={styles.cardDesc} numberOfLines={2}>
-        {item.description}
-      </Text>
-      {item.userProgress && (
-        <View style={styles.progressBar}>
-          <View
-            style={[
-              styles.progressFill,
-              { width: `${item.userProgress.percentComplete}%` },
-            ]}
-          />
-        </View>
+      {item.thumbnailUrl && (
+        <Image source={{ uri: item.thumbnailUrl }} style={styles.thumbnail} />
       )}
+      <View style={styles.cardContent}>
+        <Text style={styles.cardTitle} numberOfLines={2}>
+          {item.title}
+        </Text>
+        <Text style={styles.cardMeta}>
+          {item.difficulty} · {item.lessonCount} lessons
+        </Text>
+        <Text style={styles.cardDesc} numberOfLines={2}>
+          {item.description}
+        </Text>
+        {item.userProgress && item.userProgress.percentComplete > 0 && (
+          <View style={styles.progressContainer}>
+            <ProgressBar
+              percent={item.userProgress.percentComplete}
+              complete={item.userProgress.percentComplete >= 100}
+            />
+            <Text style={styles.progressText}>
+              {item.userProgress.percentComplete >= 100
+                ? "✓ Complete"
+                : `${Math.round(item.userProgress.percentComplete)}%`}
+            </Text>
+          </View>
+        )}
+      </View>
     </TouchableOpacity>
   );
 
-  if (isLoading) {
+  const renderFooter = () => {
+    if (!isFetchingNextPage) return null;
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2563eb" />
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#2563eb" />
       </View>
     );
-  }
+  };
 
-  if (error) {
+  const renderEmpty = () => {
+    if (isLoading) return null;
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>Failed to load courses</Text>
-        <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
-          <Text style={styles.retryText}>Retry</Text>
-        </TouchableOpacity>
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyIcon}>🔍</Text>
+        <Text style={styles.emptyTitle}>No courses found</Text>
+        <Text style={styles.emptySubtitle}>
+          Try a different search term
+        </Text>
+        {debouncedSearch.trim() && (
+          <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+            <Text style={styles.clearButtonText}>Clear search</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
-  }
+  };
 
   return (
     <View style={styles.container}>
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search courses..."
-        placeholderTextColor="#999"
-        value={search}
-        onChangeText={setSearch}
-        accessibilityLabel="Search courses"
-      />
-      <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={renderCourse}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
-        }
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No courses found</Text>
-        }
-      />
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search courses..."
+          value={searchText}
+          onChangeText={handleSearchChange}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          accessibilityLabel="Search courses"
+          accessibilityHint="Type to filter courses by title"
+        />
+      </View>
+
+      {isLoading ? (
+        <View style={styles.skeletonContainer}>
+          <SkeletonCourseCard />
+          <SkeletonCourseCard />
+          <SkeletonCourseCard />
+          <SkeletonCourseCard />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredCourses}
+          keyExtractor={(item) => item.id}
+          renderItem={renderCourseCard}
+          ListFooterComponent={renderFooter}
+          ListEmptyComponent={renderEmpty}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.3}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching && !isFetchingNextPage}
+              onRefresh={handleRefresh}
+              tintColor="#2563eb"
+            />
+          }
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: { flex: 1, backgroundColor: "#f9fafb" },
+  searchContainer: { padding: 16, paddingBottom: 8 },
   searchInput: {
-    margin: 16, marginBottom: 0, backgroundColor: "#fff", borderRadius: 12,
-    padding: 14, fontSize: 16, borderWidth: 1, borderColor: "#e5e7eb",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  listContent: { padding: 16 },
+  skeletonContainer: { padding: 16 },
+  list: { padding: 16 },
   card: {
-    backgroundColor: "#fff", borderRadius: 12, padding: 16,
-    marginBottom: 12, shadowColor: "#000", shadowOpacity: 0.05,
-    shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    marginBottom: 16,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
   },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  difficulty: { fontSize: 12, fontWeight: "600", textTransform: "capitalize" },
-  lessonCount: { fontSize: 12, color: "#666" },
-  cardTitle: { fontSize: 17, fontWeight: "600", color: "#1a1a1a", marginBottom: 6 },
-  cardDesc: { fontSize: 14, color: "#666", lineHeight: 20 },
-  progressBar: { height: 4, backgroundColor: "#e5e7eb", borderRadius: 2, marginTop: 12 },
-  progressFill: { height: 4, backgroundColor: "#2563eb", borderRadius: 2 },
-  emptyText: { textAlign: "center", color: "#999", marginTop: 32 },
-  errorText: { fontSize: 16, color: "#dc2626", marginBottom: 12 },
-  retryButton: { padding: 12 },
-  retryText: { color: "#2563eb", fontSize: 16, fontWeight: "600" },
+  thumbnail: { width: "100%", height: 140 },
+  cardContent: { padding: 14 },
+  cardTitle: { fontSize: 17, fontWeight: "700", color: "#1a1a1a" },
+  cardMeta: { fontSize: 13, color: "#6b7280", marginTop: 4 },
+  cardDesc: { fontSize: 14, color: "#444", marginTop: 6, lineHeight: 20 },
+  progressContainer: { marginTop: 10, gap: 4 },
+  progressText: { fontSize: 12, color: "#6b7280", fontWeight: "600" },
+  footerLoader: { paddingVertical: 20 },
+  emptyState: { alignItems: "center", paddingTop: 60 },
+  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: "600", color: "#1a1a1a" },
+  emptySubtitle: { fontSize: 14, color: "#6b7280", marginTop: 4 },
+  clearButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#2563eb",
+  },
+  clearButtonText: { color: "#fff", fontWeight: "600" },
 });

@@ -8,6 +8,7 @@ import type {
   DashboardData,
   MuxTokensResponse,
   UserProfile,
+  PaginatedResponse,
 } from "./types";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
@@ -139,6 +140,19 @@ export function useApiClient() {
 
     getMuxTokens: (playbackId: string) =>
       get<MuxTokensResponse>(`/api/mobile/mux/tokens/${playbackId}`),
+
+    getCoursesPaginated: (cursor?: string, limit = 20) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (cursor) params.set("cursor", cursor);
+      return apiFetch<{ data: CourseListItem[]; nextCursor: string | null }>(
+        `/api/mobile/courses?${params}`,
+        getToken,
+        onUnauthorized
+      ).then((res) => ({
+        courses: (res as any).data ?? (res as any),
+        nextCursor: (res as any).nextCursor ?? null,
+      }));
+    },
   };
 }
 

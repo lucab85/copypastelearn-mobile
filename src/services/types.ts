@@ -130,6 +130,12 @@ export interface UserProfile {
   totalLessonsCompleted: number;
 }
 
+export interface PaginatedResponse<T> {
+  success: boolean;
+  data: T[];
+  nextCursor: string | null;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
