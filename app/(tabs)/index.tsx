@@ -1,144 +1,203 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
+import { useUser } from "@clerk/clerk-expo";
+import { useEffect } from "react";
 import {
   View,
   Text,
+  ScrollView,
+  RefreshControl,
+  StyleSheet,
   FlatList,
   TouchableOpacity,
-  StyleSheet,
-  RefreshControl,
 } from "react-native";
-import { useApiClient } from "../../src/services/apiClient";
-import { SkeletonDashboard } from "../../src/components/SkeletonBox";
-import { ProgressBar } from "../../src/components/ProgressBar";
-import type { DashboardCourse, RecentLesson } from "../../src/services/types";
+import { useApiClient } from "../../../src/services/apiClient";
+import { SkeletonDashboard } from "../../../src/components/SkeletonBox";
+import { HeroCard } from "../../../src/components/HeroCard";
+import { CourseCard } from "../../../src/components/CourseCard";
+import { AnalyticsEvent, track } from "../../../src/services/analytics";
+import { colors, typography, spacing, radii, shadows, getGreeting } from "../../../src/theme";
 
-export default function HomeScreen() {
+export default function DashboardScreen() {
   const api = useApiClient();
   const router = useRouter();
+  const { user } = useUser();
 
-  const { data, isLoading, error, refetch, isRefetching } = useQuery({
+  const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ["dashboard"],
-    queryFn: api.getDashboard,
+    queryFn: () => api.getDashboard(),
   });
 
+  useEffect(() => {
+    track(AnalyticsEvent.CATALOG_VIEW);
+  }, []);
+
   if (isLoading) {
-    return <SkeletonDashboard />;
-  }
-
-  if (error) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>Failed to load dashboard</Text>
-        <TouchableOpacity onPress={() => refetch()} style={styles.retryButton}>
-          <Text style={styles.retryText}>Retry</Text>
-        </TouchableOpacity>
+      <View style={styles.container}>
+        <SkeletonDashboard />
       </View>
     );
   }
 
-  const sections: { title: string; data: (DashboardCourse | RecentLesson)[] }[] = [];
-
-  if (data?.inProgressCourses?.length) {
-    sections.push({ title: "Continue Learning", data: data.inProgressCourses });
-  }
-  if (data?.recentLessons?.length) {
-    sections.push({ title: "Recent Lessons", data: data.recentLessons });
-  }
-
-  const renderContinueCourse = (item: DashboardCourse) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => {
-        if (item.nextLesson) {
-          router.push(`/lesson/${item.slug}/${item.nextLesson.slug}`);
-        } else {
-          router.push(`/(tabs)/catalog/${item.slug}`);
-        }
-      }}
-      accessibilityRole="button"
-      accessibilityLabel={`Continue ${item.title}`}
-    >
-      <Text style={styles.cardTitle}>{item.title}</Text>
-      <ProgressBar percent={item.percentComplete} complete={item.percentComplete >= 100} />
-      <Text style={styles.progressText}>
-        {item.percentComplete >= 100 ? "✓ Complete" : `${Math.round(item.percentComplete)}% complete`}
-      </Text>
-      {item.nextLesson && (
-        <Text style={styles.nextLesson}>Next: {item.nextLesson.title}</Text>
-      )}
-    </TouchableOpacity>
-  );
-
-  const renderRecentLesson = (item: RecentLesson) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => router.push(`/lesson/${item.courseSlug}/${item.slug}`)}
-      accessibilityRole="button"
-      accessibilityLabel={`Resume ${item.title}`}
-    >
-      <Text style={styles.cardSubtitle}>{item.courseTitle}</Text>
-      <Text style={styles.cardTitle}>{item.title}</Text>
-      {item.completed && <Text style={styles.completedBadge}>✓ Completed</Text>}
-    </TouchableOpacity>
-  );
-
-  if (!sections.length) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.emptyTitle}>Welcome{data?.userName ? `, ${data.userName}` : ""}!</Text>
-        <Text style={styles.emptySubtitle}>Browse the catalog to start learning</Text>
-        <TouchableOpacity
-          style={styles.browseButton}
-          onPress={() => router.push("/(tabs)/catalog")}
-        >
-          <Text style={styles.browseText}>Browse Courses</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const firstName = user?.firstName ?? "there";
+  const coursesInProgress = data?.coursesInProgress ?? [];
+  const completedCourses = data?.completedCourses ?? [];
+  const continueLesson = data?.continueLesson;
 
   return (
-    <FlatList
+    <ScrollView
       style={styles.container}
-      contentContainerStyle={styles.listContent}
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
-      data={sections}
-      keyExtractor={(item) => item.title}
-      renderItem={({ item: section }) => (
-        <View>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-          {section.data.map((item) => (
-            <View key={"courseId" in item ? item.courseId : item.lessonId}>
-              {"courseId" in item ? renderContinueCourse(item) : renderRecentLesson(item)}
-            </View>
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} />
+      }
+    >
+      {/* Greeting */}
+      <View style={styles.greetingSection}>
+        <Text style={styles.greeting}>{getGreeting()}, {firstName} 👋</Text>
+        <Text style={styles.subtitle}>
+          {coursesInProgress.length > 0
+            ? `${coursesInProgress.length} course${coursesInProgress.length > 1 ? "s" : ""} in progress`
+            : "Ready to start learning?"}
+        </Text>
+      </View>
+
+      {/* Continue Learning Hero */}
+      {continueLesson && (
+        <View style={styles.section}>
+          <HeroCard
+            courseTitle={continueLesson.courseTitle}
+            lessonTitle={continueLesson.lessonTitle}
+            courseSlug={continueLesson.courseSlug}
+            lessonSlug={continueLesson.lessonSlug}
+            imageUrl={continueLesson.imageUrl}
+            progress={continueLesson.progress ?? 0}
+            onPress={() => router.push(`/lesson/${continueLesson.courseSlug}/${continueLesson.lessonSlug}`)}
+          />
+        </View>
+      )}
+
+      {/* Stats Row */}
+      <View style={styles.statsRow}>
+        <View style={[styles.statCard, shadows.subtle]}>
+          <Text style={styles.statNumber}>{coursesInProgress.length}</Text>
+          <Text style={styles.statLabel}>In Progress</Text>
+        </View>
+        <View style={[styles.statCard, shadows.subtle]}>
+          <Text style={styles.statNumber}>{completedCourses.length}</Text>
+          <Text style={styles.statLabel}>Completed</Text>
+        </View>
+        <View style={[styles.statCard, shadows.subtle]}>
+          <Text style={styles.statNumber}>
+            {coursesInProgress.length + completedCourses.length}
+          </Text>
+          <Text style={styles.statLabel}>Total</Text>
+        </View>
+      </View>
+
+      {/* In Progress Section */}
+      {coursesInProgress.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>In Progress</Text>
+            <TouchableOpacity onPress={() => router.push("/catalog")}>
+              <Text style={styles.seeAll}>See All</Text>
+            </TouchableOpacity>
+          </View>
+          {coursesInProgress.map((course: any) => (
+            <CourseCard
+              key={course.id}
+              title={course.title}
+              slug={course.slug}
+              lessonCount={course.lessonCount}
+              imageUrl={course.imageUrl}
+              progress={course.progress}
+              onPress={() => router.push(`/catalog/${course.slug}`)}
+            />
           ))}
         </View>
       )}
-    />
+
+      {/* Completed Section */}
+      {completedCourses.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>✅ Completed</Text>
+          {completedCourses.map((course: any) => (
+            <CourseCard
+              key={course.id}
+              title={course.title}
+              slug={course.slug}
+              lessonCount={course.lessonCount}
+              imageUrl={course.imageUrl}
+              progress={100}
+              onPress={() => router.push(`/catalog/${course.slug}`)}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* Empty State */}
+      {coursesInProgress.length === 0 && completedCourses.length === 0 && !continueLesson && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyEmoji}>🎓</Text>
+          <Text style={styles.emptyTitle}>Start Your Journey</Text>
+          <Text style={styles.emptySubtitle}>Browse courses and start learning today</Text>
+          <TouchableOpacity
+            style={styles.browseCta}
+            onPress={() => router.push("/catalog")}
+            accessibilityLabel="Browse courses"
+          >
+            <Text style={styles.browseCtaText}>Browse Courses</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
-  listContent: { padding: 16 },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
-  sectionTitle: { fontSize: 20, fontWeight: "700", color: "#1a1a1a", marginBottom: 12, marginTop: 8 },
-  card: {
-    backgroundColor: "#fff", borderRadius: 12, padding: 16,
-    marginBottom: 12, shadowColor: "#000", shadowOpacity: 0.05,
-    shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { paddingHorizontal: spacing.md, paddingBottom: spacing.xxl },
+
+  greetingSection: { paddingTop: spacing.lg, marginBottom: spacing.lg },
+  greeting: { ...typography.h1, color: colors.text },
+  subtitle: { ...typography.body, color: colors.textSecondary, marginTop: spacing.xs },
+
+  section: { marginBottom: spacing.lg },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.md },
+  sectionTitle: { ...typography.h3, color: colors.text },
+  seeAll: { ...typography.buttonSm, color: colors.primary },
+
+  statsRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
-  cardTitle: { fontSize: 16, fontWeight: "600", color: "#1a1a1a" },
-  cardSubtitle: { fontSize: 12, color: "#666", marginBottom: 4 },
-  progressText: { fontSize: 12, color: "#666", marginTop: 6 },
-  nextLesson: { fontSize: 13, color: "#2563eb", marginTop: 8 },
-  completedBadge: { fontSize: 12, color: "#16a34a", marginTop: 8 },
-  emptyTitle: { fontSize: 24, fontWeight: "700", color: "#1a1a1a" },
-  emptySubtitle: { fontSize: 16, color: "#666", marginTop: 8, marginBottom: 24 },
-  browseButton: { backgroundColor: "#2563eb", borderRadius: 12, paddingHorizontal: 24, paddingVertical: 14 },
-  browseText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  errorText: { fontSize: 16, color: "#dc2626", marginBottom: 12 },
-  retryButton: { padding: 12 },
-  retryText: { color: "#2563eb", fontSize: 16, fontWeight: "600" },
+  statCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+  statNumber: { ...typography.h2, color: colors.primary },
+  statLabel: { ...typography.caption, color: colors.textTertiary, marginTop: 2 },
+
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: spacing.xxl,
+  },
+  emptyEmoji: { fontSize: 64, marginBottom: spacing.md },
+  emptyTitle: { ...typography.h2, color: colors.text, marginBottom: spacing.sm },
+  emptySubtitle: { ...typography.body, color: colors.textSecondary, textAlign: "center", marginBottom: spacing.lg },
+  browseCta: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+  },
+  browseCtaText: { ...typography.button, color: colors.textInverse },
 });

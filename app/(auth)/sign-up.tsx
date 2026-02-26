@@ -12,6 +12,7 @@ import {
   Platform,
   SafeAreaView,
 } from "react-native";
+import { colors, typography, spacing, radii } from "../../src/theme";
 
 export default function SignUpScreen() {
   const { signUp, setActive, isLoaded } = useSignUp();
@@ -68,30 +69,43 @@ export default function SignUpScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.inner}
         >
-          <Text style={styles.title}>Verify Email</Text>
-          <Text style={styles.subtitle}>Enter the code sent to {email}</Text>
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          <TextInput
-            style={styles.input}
-            placeholder="Verification code"
-            placeholderTextColor="#999"
-            value={code}
-            onChangeText={setCode}
-            keyboardType="number-pad"
-            accessibilityLabel="Verification code"
-          />
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleVerify}
-            disabled={loading}
-            accessibilityRole="button"
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Verify</Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.logoSection}>
+            <View style={styles.logoCircle}>
+              <Text style={styles.logoEmoji}>✉️</Text>
+            </View>
+            <Text style={styles.title}>Verify Email</Text>
+            <Text style={styles.tagline}>Enter the code sent to {email}</Text>
+          </View>
+
+          {error ? (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              placeholder="Verification code"
+              placeholderTextColor={colors.textTertiary}
+              value={code}
+              onChangeText={setCode}
+              keyboardType="number-pad"
+              accessibilityLabel="Verification code"
+            />
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleVerify}
+              disabled={loading}
+              accessibilityRole="button"
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.textInverse} />
+              ) : (
+                <Text style={styles.buttonText}>Verify</Text>
+              )}
+            </TouchableOpacity>
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
@@ -103,40 +117,54 @@ export default function SignUpScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.inner}
       >
-        <Text style={styles.title}>Create Account</Text>
-        <Text style={styles.subtitle}>Start learning today</Text>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#999"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          accessibilityLabel="Email address"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#999"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          accessibilityLabel="Password"
-        />
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSignUp}
-          disabled={loading}
-          accessibilityRole="button"
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Sign Up</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.logoSection}>
+          <View style={styles.logoCircle}>
+            <Text style={styles.logoEmoji}>🚀</Text>
+          </View>
+          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.tagline}>Start your learning journey</Text>
+        </View>
+
+        {error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.form}>
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor={colors.textTertiary}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            accessibilityLabel="Email address"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor={colors.textTertiary}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            accessibilityLabel="Password"
+          />
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleSignUp}
+            disabled={loading}
+            accessibilityRole="button"
+          >
+            {loading ? (
+              <ActivityIndicator color={colors.textInverse} />
+            ) : (
+              <Text style={styles.buttonText}>Sign Up</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
         <Link href="/(auth)/sign-in" asChild>
           <TouchableOpacity style={styles.linkButton}>
             <Text style={styles.linkText}>
@@ -150,22 +178,51 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  inner: { flex: 1, justifyContent: "center", paddingHorizontal: 24 },
-  title: { fontSize: 28, fontWeight: "700", textAlign: "center", color: "#1a1a1a" },
-  subtitle: { fontSize: 16, color: "#666", textAlign: "center", marginTop: 8, marginBottom: 32 },
-  error: { color: "#dc2626", textAlign: "center", marginBottom: 16, fontSize: 14 },
+  container: { flex: 1, backgroundColor: colors.surface },
+  inner: { flex: 1, justifyContent: "center", paddingHorizontal: spacing.lg },
+
+  logoSection: { alignItems: "center", marginBottom: spacing.xl },
+  logoCircle: {
+    width: 80, height: 80, borderRadius: 40,
+    backgroundColor: colors.primaryBg,
+    justifyContent: "center", alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  logoEmoji: { fontSize: 36 },
+  title: { ...typography.h1, color: colors.text },
+  tagline: { ...typography.body, color: colors.textSecondary, marginTop: spacing.xs, textAlign: "center" },
+
+  errorBox: {
+    backgroundColor: colors.errorBg,
+    borderRadius: radii.sm,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  errorText: { ...typography.bodySm, color: colors.error, textAlign: "center" },
+
+  form: { gap: spacing.sm },
   input: {
-    borderWidth: 1, borderColor: "#ddd", borderRadius: 12, padding: 16,
-    fontSize: 16, marginBottom: 12, color: "#1a1a1a", backgroundColor: "#f9f9f9",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    ...typography.body,
+    color: colors.text,
+    backgroundColor: colors.surfaceAlt,
+    minHeight: 52,
   },
   button: {
-    backgroundColor: "#2563eb", borderRadius: 12, padding: 16,
-    alignItems: "center", marginTop: 8,
+    backgroundColor: colors.primary,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    alignItems: "center",
+    marginTop: spacing.sm,
+    minHeight: 52,
   },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  linkButton: { marginTop: 24, alignItems: "center" },
-  linkText: { color: "#666", fontSize: 14 },
-  linkBold: { color: "#2563eb", fontWeight: "600" },
+  buttonText: { ...typography.button, color: colors.textInverse },
+
+  linkButton: { marginTop: spacing.lg, alignItems: "center" },
+  linkText: { ...typography.body, color: colors.textSecondary },
+  linkBold: { color: colors.primary, fontWeight: "600" },
 });
