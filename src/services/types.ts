@@ -122,6 +122,14 @@ export interface MuxTokensResponse {
   storyboard?: string;
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string | null;
+  isSubscribed: boolean;
+  totalLessonsCompleted: number;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;

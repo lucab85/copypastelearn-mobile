@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -12,9 +12,17 @@ import {
   type AppStateStatus,
 } from "react-native";
 import { Video, ResizeMode, type AVPlaybackStatus } from "expo-av";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useApiClient } from "../../../src/services/apiClient";
 
-const SAVE_INTERVAL_MS = 10_000; // save position every 10s
+const SAVE_INTERVAL_MS = 10_000;
+const PLAYBACK_RATES = [1, 1.25, 1.5, 1.75, 2];
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 export default function LessonPlayerScreen() {
   const { courseSlug, lessonSlug } = useLocalSearchParams<{
@@ -28,8 +36,13 @@ export default function LessonPlayerScreen() {
   const videoRef = useRef<Video>(null);
   const lastSavedPositionRef = useRef(0);
   const currentPositionRef = useRef(0);
+  const isPlayingRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setInterval>>();
   const hasCompletedRef = useRef(false);
+
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [resumePosition, setResumePosition] = useState(0);
 
   const { data: lesson, isLoading, error, refetch } = useQuery({
     queryKey: ["lesson", courseSlug, lessonSlug],
@@ -37,22 +50,35 @@ export default function LessonPlayerScreen() {
     enabled: !!courseSlug && !!lessonSlug,
   });
 
-  const { data: muxTokens } = useQuery({
+  const {
+    data: muxTokens,
+    refetch: refetchTokens,
+  } = useQuery({
     queryKey: ["mux-tokens", lesson?.videoPlaybackId],
     queryFn: () => api.getMuxTokens(lesson!.videoPlaybackId!),
     enabled: !!lesson?.videoPlaybackId,
+    staleTime: 1000 * 60 * 90, // Refetch before 2h expiry
   });
 
-  // Save current position to backend
+  // Show resume prompt if there's saved progress > 10s
+  useEffect(() => {
+    if (lesson?.userProgress?.videoPositionSeconds && lesson.userProgress.videoPositionSeconds > 10) {
+      setResumePosition(lesson.userProgress.videoPositionSeconds);
+      setShowResumePrompt(true);
+    }
+  }, [lesson]);
+
+  // Save current position to backend (only when playing)
   const savePosition = useCallback(async () => {
     if (!lesson) return;
+    if (!isPlayingRef.current) return; // Don't save when paused
     const pos = currentPositionRef.current;
-    if (Math.abs(pos - lastSavedPositionRef.current) < 2) return; // skip if <2s change
+    if (Math.abs(pos - lastSavedPositionRef.current) < 2) return;
     lastSavedPositionRef.current = pos;
     try {
       await api.saveVideoPosition(lesson.id, pos);
     } catch {
-      // Silently fail — will retry next interval
+      // Will retry next interval
     }
   }, [lesson, api]);
 
@@ -61,29 +87,51 @@ export default function LessonPlayerScreen() {
     saveTimerRef.current = setInterval(savePosition, SAVE_INTERVAL_MS);
     return () => {
       if (saveTimerRef.current) clearInterval(saveTimerRef.current);
-      // Save on unmount
       savePosition();
     };
   }, [savePosition]);
 
-  // Save on app background
+  // Save on app background + keep screen awake during playback
   useEffect(() => {
     const handleAppState = (state: AppStateStatus) => {
       if (state === "background" || state === "inactive") {
         savePosition();
+        deactivateKeepAwake();
       }
     };
     const sub = AppState.addEventListener("change", handleAppState);
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      deactivateKeepAwake();
+    };
   }, [savePosition]);
 
   const handlePlaybackStatusUpdate = async (status: AVPlaybackStatus) => {
-    if (!status.isLoaded) return;
+    if (!status.isLoaded) {
+      // Handle token expiry errors — refetch tokens and retry
+      if (status.error) {
+        console.warn("Playback error:", status.error);
+        refetchTokens();
+      }
+      return;
+    }
+
     currentPositionRef.current = (status.positionMillis ?? 0) / 1000;
+    isPlayingRef.current = status.isPlaying;
+
+    // Keep screen awake while playing
+    if (status.isPlaying) {
+      activateKeepAwakeAsync().catch(() => {});
+    } else {
+      deactivateKeepAwake();
+      // Save on pause
+      savePosition();
+    }
 
     // Mark complete when video finishes
     if (status.didJustFinish && !hasCompletedRef.current && lesson) {
       hasCompletedRef.current = true;
+      deactivateKeepAwake();
       try {
         await api.markLessonComplete(lesson.id);
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -92,6 +140,23 @@ export default function LessonPlayerScreen() {
         // Will sync next time
       }
     }
+  };
+
+  const handleResume = () => {
+    setShowResumePrompt(false);
+    videoRef.current?.setPositionAsync(resumePosition * 1000);
+  };
+
+  const handleStartOver = () => {
+    setShowResumePrompt(false);
+    videoRef.current?.setPositionAsync(0);
+  };
+
+  const cyclePlaybackRate = () => {
+    const currentIdx = PLAYBACK_RATES.indexOf(playbackRate);
+    const nextRate = PLAYBACK_RATES[(currentIdx + 1) % PLAYBACK_RATES.length];
+    setPlaybackRate(nextRate);
+    videoRef.current?.setRateAsync(nextRate, true);
   };
 
   if (isLoading) {
@@ -123,24 +188,63 @@ export default function LessonPlayerScreen() {
     }
   }
 
-  const resumePosition = lesson.userProgress?.videoPositionSeconds ?? 0;
-
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: lesson.title, headerBackTitle: "Back" }} />
 
       {videoUri ? (
-        <Video
-          ref={videoRef}
-          source={{ uri: videoUri }}
-          style={styles.video}
-          useNativeControls
-          resizeMode={ResizeMode.CONTAIN}
-          shouldPlay
-          positionMillis={resumePosition * 1000}
-          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-          onError={(error) => console.warn("Video error:", error)}
-        />
+        <View>
+          <Video
+            ref={videoRef}
+            source={{ uri: videoUri }}
+            style={styles.video}
+            useNativeControls
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay={!showResumePrompt}
+            rate={playbackRate}
+            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+            onError={(error) => {
+              console.warn("Video error:", error);
+              refetchTokens();
+            }}
+          />
+
+          {/* Resume prompt overlay */}
+          {showResumePrompt && (
+            <View style={styles.resumeOverlay}>
+              <Text style={styles.resumeText}>
+                Resume from {formatTime(resumePosition)}?
+              </Text>
+              <View style={styles.resumeButtons}>
+                <TouchableOpacity
+                  style={styles.resumeButton}
+                  onPress={handleStartOver}
+                  accessibilityLabel="Start over"
+                >
+                  <Text style={styles.resumeButtonText}>Start Over</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.resumeButton, styles.resumeButtonPrimary]}
+                  onPress={handleResume}
+                  accessibilityLabel={`Resume from ${formatTime(resumePosition)}`}
+                >
+                  <Text style={[styles.resumeButtonText, styles.resumeButtonPrimaryText]}>
+                    Resume
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Playback speed control */}
+          <TouchableOpacity
+            style={styles.speedButton}
+            onPress={cyclePlaybackRate}
+            accessibilityLabel={`Playback speed ${playbackRate}x`}
+          >
+            <Text style={styles.speedText}>{playbackRate}x</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <View style={styles.noVideo}>
           <Text style={styles.noVideoText}>No video available</Text>
@@ -216,6 +320,26 @@ const styles = StyleSheet.create({
     justifyContent: "center", alignItems: "center",
   },
   noVideoText: { color: "#666", fontSize: 16 },
+  resumeOverlay: {
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", alignItems: "center",
+    aspectRatio: 16 / 9,
+  },
+  resumeText: { color: "#fff", fontSize: 18, fontWeight: "600", marginBottom: 16 },
+  resumeButtons: { flexDirection: "row", gap: 12 },
+  resumeButton: {
+    paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8,
+    borderWidth: 1, borderColor: "#fff",
+  },
+  resumeButtonPrimary: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
+  resumeButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  resumeButtonPrimaryText: { color: "#fff" },
+  speedButton: {
+    position: "absolute", bottom: 8, right: 8,
+    backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 6,
+    paddingHorizontal: 10, paddingVertical: 4,
+  },
+  speedText: { color: "#fff", fontSize: 13, fontWeight: "600" },
   content: { flex: 1, backgroundColor: "#fff", padding: 16 },
   title: { fontSize: 20, fontWeight: "700", color: "#1a1a1a", marginBottom: 12 },
   completedBanner: {
