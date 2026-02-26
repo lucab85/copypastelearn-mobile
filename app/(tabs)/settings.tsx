@@ -10,11 +10,42 @@ import {
   Alert,
   Switch,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors, typography, spacing, radii } from "../../src/theme";
-import { hapticLight } from "../../src/services/haptics";
+import { colors, typography, spacing, radii, shadows } from "../../src/theme";
+import { hapticLight, hapticMedium } from "../../src/services/haptics";
 
 const AUTOPLAY_KEY = "settings:autoplay";
+
+interface SettingsRowProps {
+  icon: string;
+  label: string;
+  hint?: string;
+  onPress?: () => void;
+  right?: React.ReactNode;
+}
+
+function SettingsRow({ icon, label, hint, onPress, right }: SettingsRowProps) {
+  const content = (
+    <View style={styles.row}>
+      <Text style={styles.rowIcon}>{icon}</Text>
+      <View style={styles.rowLeft}>
+        <Text style={styles.rowText}>{label}</Text>
+        {hint && <Text style={styles.rowHint}>{hint}</Text>}
+      </View>
+      {right ?? <Text style={styles.rowArrow}>›</Text>}
+    </View>
+  );
+
+  if (onPress) {
+    return (
+      <TouchableOpacity onPress={onPress} accessibilityLabel={label} accessibilityRole="button">
+        {content}
+      </TouchableOpacity>
+    );
+  }
+  return content;
+}
 
 export default function SettingsScreen() {
   const { signOut } = useAuth();
@@ -34,134 +65,190 @@ export default function SettingsScreen() {
   };
 
   const handleSignOut = () => {
+    hapticMedium();
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
       { text: "Sign Out", style: "destructive", onPress: () => signOut() },
     ]);
   };
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {user?.firstName?.[0]?.toUpperCase() ?? user?.emailAddresses[0]?.emailAddress[0]?.toUpperCase() ?? "?"}
-          </Text>
-        </View>
-        <Text style={styles.name}>
-          {user?.firstName} {user?.lastName}
-        </Text>
-        <Text style={styles.email}>
-          {user?.emailAddresses[0]?.emailAddress}
-        </Text>
-      </View>
+  const initials =
+    user?.firstName?.[0]?.toUpperCase() ??
+    user?.emailAddresses[0]?.emailAddress[0]?.toUpperCase() ??
+    "?";
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Playback</Text>
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Text style={styles.rowText}>Autoplay Next Lesson</Text>
-            <Text style={styles.rowHint}>Auto-continue after lesson completes</Text>
+  return (
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Profile Card */}
+        <View style={[styles.profileCard, shadows.card]}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials}</Text>
           </View>
-          <Switch
-            value={autoplayEnabled}
-            onValueChange={toggleAutoplay}
-            trackColor={{ true: "#2563eb", false: "#e5e7eb" }}
-            accessibilityLabel="Autoplay next lesson"
+          <View style={styles.profileInfo}>
+            <Text style={styles.name}>
+              {user?.firstName} {user?.lastName}
+            </Text>
+            <Text style={styles.email}>
+              {user?.emailAddresses[0]?.emailAddress}
+            </Text>
+          </View>
+        </View>
+
+        {/* Playback Section */}
+        <Text style={styles.sectionTitle}>PLAYBACK</Text>
+        <View style={[styles.sectionCard, shadows.subtle]}>
+          <SettingsRow
+            icon="▶️"
+            label="Autoplay Next Lesson"
+            hint="Automatically play the next lesson after completion"
+            right={
+              <Switch
+                value={autoplayEnabled}
+                onValueChange={toggleAutoplay}
+                trackColor={{ true: colors.primary, false: colors.border }}
+                thumbColor={autoplayEnabled ? colors.surface : colors.textTertiary}
+                accessibilityLabel="Autoplay next lesson"
+              />
+            }
           />
         </View>
-      </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Support</Text>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => Linking.openURL("https://copypastelearn.com/contact")}
-          accessibilityRole="link"
-          accessibilityLabel="Contact support"
-        >
-          <Text style={styles.rowText}>Contact Support</Text>
-          <Text style={styles.rowArrow}>›</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => Linking.openURL("mailto:support@copypastelearn.com?subject=Mobile App Feedback")}
-          accessibilityRole="link"
-          accessibilityLabel="Send feedback"
-        >
-          <Text style={styles.rowText}>Send Feedback</Text>
-          <Text style={styles.rowArrow}>›</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Support Section */}
+        <Text style={styles.sectionTitle}>SUPPORT</Text>
+        <View style={[styles.sectionCard, shadows.subtle]}>
+          <SettingsRow
+            icon="💬"
+            label="Contact Support"
+            onPress={() => Linking.openURL("https://copypastelearn.com/contact")}
+          />
+          <View style={styles.divider} />
+          <SettingsRow
+            icon="📝"
+            label="Send Feedback"
+            hint="Help us improve the app"
+            onPress={() => Linking.openURL("mailto:support@copypastelearn.com?subject=Mobile App Feedback")}
+          />
+        </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Legal</Text>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => Linking.openURL("https://copypastelearn.com/privacy")}
-          accessibilityRole="link"
-          accessibilityLabel="Privacy policy"
-        >
-          <Text style={styles.rowText}>Privacy Policy</Text>
-          <Text style={styles.rowArrow}>›</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => Linking.openURL("https://copypastelearn.com/terms")}
-          accessibilityRole="link"
-          accessibilityLabel="Terms of service"
-        >
-          <Text style={styles.rowText}>Terms of Service</Text>
-          <Text style={styles.rowArrow}>›</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Legal Section */}
+        <Text style={styles.sectionTitle}>LEGAL</Text>
+        <View style={[styles.sectionCard, shadows.subtle]}>
+          <SettingsRow
+            icon="🔒"
+            label="Privacy Policy"
+            onPress={() => Linking.openURL("https://copypastelearn.com/privacy")}
+          />
+          <View style={styles.divider} />
+          <SettingsRow
+            icon="📄"
+            label="Terms of Service"
+            onPress={() => Linking.openURL("https://copypastelearn.com/terms")}
+          />
+        </View>
 
-      <TouchableOpacity
-        style={styles.signOutButton}
-        onPress={handleSignOut}
-        accessibilityRole="button"
-        accessibilityLabel="Sign out"
-      >
-        <Text style={styles.signOutText}>Sign Out</Text>
-      </TouchableOpacity>
+        {/* Sign Out */}
+        <TouchableOpacity
+          style={styles.signOutButton}
+          onPress={handleSignOut}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+        >
+          <Text style={styles.signOutText}>Sign Out</Text>
+        </TouchableOpacity>
 
-      <Text style={styles.version}>CopyPasteLearn Mobile v1.0.0</Text>
-    </ScrollView>
+        {/* Version Footer */}
+        <Text style={styles.version}>CopyPasteLearn Mobile v1.0.0</Text>
+        <Text style={styles.versionSub}>Made with ❤️ by CopyPasteLearn</Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
-  content: { padding: 16 },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md, paddingBottom: spacing.xxl },
+
+  // Profile
   profileCard: {
-    backgroundColor: "#fff", borderRadius: 12, padding: 24,
-    alignItems: "center", marginBottom: 24,
-    shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 }, elevation: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
   },
   avatar: {
-    width: 64, height: 64, borderRadius: 32, backgroundColor: "#2563eb",
-    justifyContent: "center", alignItems: "center", marginBottom: 12,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  avatarText: { color: "#fff", fontSize: 24, fontWeight: "700" },
-  name: { fontSize: 18, fontWeight: "600", color: "#1a1a1a" },
-  email: { fontSize: 14, color: "#666", marginTop: 4 },
-  section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 13, fontWeight: "600", color: "#999", textTransform: "uppercase", marginBottom: 8, marginLeft: 4 },
+  avatarText: { ...typography.h2, color: colors.textInverse },
+  profileInfo: { marginLeft: spacing.md, flex: 1 },
+  name: { ...typography.h3, color: colors.text },
+  email: { ...typography.bodySm, color: colors.textSecondary, marginTop: 2 },
+
+  // Sections
+  sectionTitle: {
+    ...typography.captionSm,
+    color: colors.textTertiary,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
+    letterSpacing: 1,
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    marginBottom: spacing.lg,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+  },
+
+  // Rows
   row: {
-    backgroundColor: "#fff", flexDirection: "row", justifyContent: "space-between",
-    alignItems: "center", padding: 16, borderRadius: 12, marginBottom: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: spacing.md,
     minHeight: 52,
   },
-  rowLeft: { flex: 1, marginRight: 12 },
-  rowText: { fontSize: 16, color: "#1a1a1a" },
-  rowHint: { fontSize: 12, color: "#6b7280", marginTop: 2 },
-  rowArrow: { fontSize: 20, color: "#ccc" },
+  rowIcon: { fontSize: 18, marginRight: spacing.sm, width: 28 },
+  rowLeft: { flex: 1, marginRight: spacing.sm },
+  rowText: { ...typography.body, color: colors.text },
+  rowHint: { ...typography.caption, color: colors.textTertiary, marginTop: 2 },
+  rowArrow: { fontSize: 22, color: colors.textTertiary },
+  divider: { height: 1, backgroundColor: colors.borderLight, marginLeft: 52 },
+
+  // Sign Out
   signOutButton: {
-    backgroundColor: "#fff", borderRadius: 12, padding: 16,
-    alignItems: "center", borderWidth: 1, borderColor: "#dc2626",
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.error,
     minHeight: 52,
+    marginTop: spacing.sm,
   },
-  signOutText: { color: "#dc2626", fontSize: 16, fontWeight: "600" },
-  version: { textAlign: "center", color: "#9ca3af", fontSize: 12, marginTop: 24, marginBottom: 32 },
+  signOutText: { ...typography.button, color: colors.error },
+
+  // Footer
+  version: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    textAlign: "center",
+    marginTop: spacing.xl,
+  },
+  versionSub: {
+    ...typography.captionSm,
+    color: colors.textTertiary,
+    textAlign: "center",
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
+  },
 });
