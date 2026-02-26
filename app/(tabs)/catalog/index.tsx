@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useApiClient } from "../../../src/services/apiClient";
 import { useDebouncedCallback } from "../../../src/hooks/useDebouncedCallback";
 import { SkeletonCourseCard } from "../../../src/components/SkeletonBox";
 import { ProgressBar } from "../../../src/components/ProgressBar";
+import { AnalyticsEvent, track } from "../../../src/services/analytics";
 import type { CourseListItem } from "../../../src/services/types";
 
 const PAGE_SIZE = 20;
@@ -29,6 +30,11 @@ export default function CatalogScreen() {
   const debouncedUpdate = useDebouncedCallback((text: string) => {
     setDebouncedSearch(text);
   }, 300);
+
+  // Track catalog view
+  useEffect(() => {
+    track(AnalyticsEvent.CATALOG_VIEW);
+  }, []);
 
   const handleSearchChange = (text: string) => {
     setSearchText(text);

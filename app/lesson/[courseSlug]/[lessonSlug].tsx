@@ -14,7 +14,9 @@ import {
 import { Video, ResizeMode, type AVPlaybackStatus } from "expo-av";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as ScreenOrientation from "expo-screen-orientation";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useApiClient } from "../../../src/services/apiClient";
+import { AnalyticsEvent, track } from "../../../src/services/analytics";
 
 const SAVE_INTERVAL_MS = 10_000;
 const BUFFERING_DEBOUNCE_MS = 500;
@@ -52,6 +54,9 @@ export default function LessonPlayerScreen() {
   const [isLandscape, setIsLandscape] = useState(false);
   const [showCompletion, setShowCompletion] = useState(false);
   const [orientationSupported, setOrientationSupported] = useState(true);
+  const [autoplayCountdown, setAutoplayCountdown] = useState<number | null>(null);
+  const [autoplayEnabled, setAutoplayEnabled] = useState(true);
+  const autoplayTimerRef = useRef<ReturnType<typeof setInterval>>();
 
   const { data: lesson, isLoading, error, refetch } = useQuery({
     queryKey: ["lesson", courseSlug, lessonSlug],
@@ -76,19 +81,34 @@ export default function LessonPlayerScreen() {
     });
   }, []);
 
+  // Load autoplay setting
+  useEffect(() => {
+    AsyncStorage.getItem("settings:autoplay").then((val) => {
+      if (val !== null) setAutoplayEnabled(val === "true");
+    });
+  }, []);
+
+  // Track lesson view
+  useEffect(() => {
+    if (lesson) {
+      track(AnalyticsEvent.LESSON_VIEW, { courseSlug, lessonSlug, lessonId: lesson.id });
+    }
+  }, [lesson, courseSlug, lessonSlug]);
+
   // Unlock orientation on unmount
   useEffect(() => {
     return () => {
       ScreenOrientation.unlockAsync().catch(() => {});
       deactivateKeepAwake();
+      if (autoplayTimerRef.current) clearInterval(autoplayTimerRef.current);
     };
   }, []);
 
-  // Show resume prompt if there's saved progress > 10s
   useEffect(() => {
     if (lesson?.userProgress?.videoPositionSeconds && lesson.userProgress.videoPositionSeconds > 10) {
       setResumePosition(lesson.userProgress.videoPositionSeconds);
       setShowResumePrompt(true);
+      track(AnalyticsEvent.RESUME_PROMPT_SHOWN, { lessonId: lesson.id });
     }
   }, [lesson]);
 
@@ -172,12 +192,32 @@ export default function LessonPlayerScreen() {
       hasCompletedRef.current = true;
       deactivateKeepAwake();
       setShowCompletion(true);
+      track(AnalyticsEvent.LESSON_COMPLETE, { lessonId: lesson.id, courseSlug });
+
+      // Start autoplay countdown if enabled and next lesson exists
+      if (autoplayEnabled && lesson.nextLesson) {
+        setAutoplayCountdown(5);
+        autoplayTimerRef.current = setInterval(() => {
+          setAutoplayCountdown((prev) => {
+            if (prev === null || prev <= 1) {
+              if (autoplayTimerRef.current) clearInterval(autoplayTimerRef.current);
+              // Navigate to next lesson
+              ScreenOrientation.unlockAsync().catch(() => {});
+              router.replace(`/lesson/${courseSlug}/${lesson.nextLesson!.slug}`);
+              return null;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      }
+
       try {
         await api.markLessonComplete(lesson.id);
+        track(AnalyticsEvent.PROGRESS_SAVE_SUCCESS, { lessonId: lesson.id });
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         queryClient.invalidateQueries({ queryKey: ["course", courseSlug] });
       } catch {
-        // Will sync next time
+        track(AnalyticsEvent.PROGRESS_SAVE_FAIL, { lessonId: lesson.id });
       }
     }
   };
@@ -189,6 +229,7 @@ export default function LessonPlayerScreen() {
 
   const handleStartOver = () => {
     setShowResumePrompt(false);
+    track(AnalyticsEvent.RESUME_START_OVER, { lessonId: lesson?.id });
     videoRef.current?.setPositionAsync(0);
   };
 
@@ -221,6 +262,8 @@ export default function LessonPlayerScreen() {
 
   const handleWatchAgain = () => {
     setShowCompletion(false);
+    setAutoplayCountdown(null);
+    if (autoplayTimerRef.current) clearInterval(autoplayTimerRef.current);
     hasCompletedRef.current = false;
     videoRef.current?.setPositionAsync(0);
     videoRef.current?.playAsync();
@@ -338,10 +381,26 @@ export default function LessonPlayerScreen() {
               <Text style={styles.completionEmoji}>🎉</Text>
               <Text style={styles.completionTitle}>Lesson Complete!</Text>
               <Text style={styles.completionCheck}>✓</Text>
+              {autoplayCountdown !== null && lesson.nextLesson && (
+                <Text style={styles.countdownText}>
+                  Next lesson in {autoplayCountdown}s...
+                </Text>
+              )}
               <View style={styles.completionButtons}>
                 <TouchableOpacity style={styles.completionBtn} onPress={handleWatchAgain}>
                   <Text style={styles.completionBtnText}>Watch Again</Text>
                 </TouchableOpacity>
+                {autoplayCountdown !== null && (
+                  <TouchableOpacity
+                    style={styles.completionBtn}
+                    onPress={() => {
+                      setAutoplayCountdown(null);
+                      if (autoplayTimerRef.current) clearInterval(autoplayTimerRef.current);
+                    }}
+                  >
+                    <Text style={styles.completionBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                )}
                 {lesson.nextLesson && (
                   <TouchableOpacity
                     style={[styles.completionBtn, styles.completionBtnPrimary]}
@@ -494,7 +553,8 @@ const styles = StyleSheet.create({
   },
   completionEmoji: { fontSize: 48, marginBottom: 8 },
   completionTitle: { color: "#fff", fontSize: 22, fontWeight: "700", marginBottom: 4 },
-  completionCheck: { color: "#16a34a", fontSize: 36, fontWeight: "700", marginBottom: 20 },
+  completionCheck: { color: "#16a34a", fontSize: 36, fontWeight: "700", marginBottom: 8 },
+  countdownText: { color: "#93c5fd", fontSize: 14, fontWeight: "600", marginBottom: 16 },
   completionButtons: { gap: 10, alignItems: "center", width: "80%" },
   completionBtn: {
     paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10,

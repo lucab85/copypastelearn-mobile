@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
+import { useEffect } from "react";
 import {
   View,
   Text,
@@ -11,6 +12,7 @@ import {
 import { useApiClient } from "../../../src/services/apiClient";
 import { SkeletonBox, SkeletonLessonRow } from "../../../src/components/SkeletonBox";
 import { ProgressBar } from "../../../src/components/ProgressBar";
+import { AnalyticsEvent, track } from "../../../src/services/analytics";
 import type { LessonSummary } from "../../../src/services/types";
 
 export default function CourseDetailScreen() {
@@ -23,6 +25,12 @@ export default function CourseDetailScreen() {
     queryFn: () => api.getCourse(slug!),
     enabled: !!slug,
   });
+
+  useEffect(() => {
+    if (course) {
+      track(AnalyticsEvent.COURSE_VIEW, { courseSlug: slug, courseId: course.id });
+    }
+  }, [course, slug]);
 
   if (isLoading) {
     return (
@@ -54,8 +62,8 @@ export default function CourseDetailScreen() {
     );
   }
 
-  // Filter out lessons that have labs (FR-9: labs hidden everywhere)
-  const lessons = course.lessons.filter((l) => !l.hasLab);
+  // Show all lessons; lab lessons get a web CTA instead of being hidden
+  const lessons = course.lessons;
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return "";
@@ -96,6 +104,7 @@ export default function CourseDetailScreen() {
               </Text>
             ) : null}
             {item.isFree && <Text style={styles.freeBadge}>Free</Text>}
+            {item.hasLab && <Text style={styles.labBadge}>🔬 Lab on web</Text>}
             {!item.isAccessible && <Text style={styles.lockIcon}>🔒</Text>}
           </View>
         </View>
@@ -187,6 +196,7 @@ const styles = StyleSheet.create({
   lessonMeta: { flexDirection: "row", marginTop: 4, gap: 8, alignItems: "center" },
   duration: { fontSize: 12, color: "#999" },
   freeBadge: { fontSize: 11, color: "#16a34a", fontWeight: "600" },
+  labBadge: { fontSize: 11, color: "#7c3aed", fontWeight: "600" },
   lockIcon: { fontSize: 12 },
   errorText: { fontSize: 16, color: "#dc2626", marginBottom: 12 },
   retryButton: { padding: 12 },
