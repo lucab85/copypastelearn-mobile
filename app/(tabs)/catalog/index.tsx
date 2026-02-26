@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useApiClient } from "../../../src/services/apiClient";
 import { useDebouncedCallback } from "../../../src/hooks/useDebouncedCallback";
-import { SkeletonCourseCard } from "../../../src/components/SkeletonBox";
+import { SkeletonCatalog } from "../../../src/components/SkeletonBox";
 import { CourseCard } from "../../../src/components/CourseCard";
 import { AnalyticsEvent, track } from "../../../src/services/analytics";
 import { colors, typography, spacing, radii } from "../../../src/theme";
@@ -169,11 +169,7 @@ export default function CatalogScreen() {
 
       {/* Course List */}
       {isLoading ? (
-        <View style={styles.listContent}>
-          {[1, 2, 3].map((i) => (
-            <SkeletonCourseCard key={i} />
-          ))}
-        </View>
+        <SkeletonCatalog />
       ) : (
         <FlatList
           data={filteredCourses}

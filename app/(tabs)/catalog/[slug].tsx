@@ -10,7 +10,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useApiClient } from "../../../src/services/apiClient";
-import { SkeletonBox, SkeletonLessonRow } from "../../../src/components/SkeletonBox";
+import { SkeletonBox, SkeletonLessonRow, SkeletonCourseDetail } from "../../../src/components/SkeletonBox";
 import { ProgressBar } from "../../../src/components/ProgressBar";
 import { ProgressRing } from "../../../src/components/ProgressRing";
 import { AnalyticsEvent, track } from "../../../src/services/analytics";
@@ -38,15 +38,7 @@ export default function CourseDetailScreen() {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ title: "Loading..." }} />
-        <View style={styles.skeletonHeader}>
-          <SkeletonBox width="70%" height={24} style={{ marginBottom: 12 }} />
-          <SkeletonBox width="40%" height={16} />
-        </View>
-        <View style={styles.listContent}>
-          {[1, 2, 3, 4, 5].map((i) => (
-            <SkeletonLessonRow key={i} />
-          ))}
-        </View>
+        <SkeletonCourseDetail />
       </View>
     );
   }
