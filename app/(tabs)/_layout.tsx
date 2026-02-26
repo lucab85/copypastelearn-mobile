@@ -1,7 +1,7 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Redirect, Tabs } from "expo-router";
 import { Text } from "react-native";
-import { colors } from "../../src/theme";
+import { colors } from "@/theme";
 
 export default function TabsLayout() {
   const { isSignedIn, isLoaded } = useAuth();

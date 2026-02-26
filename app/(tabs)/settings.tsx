@@ -12,8 +12,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { colors, typography, spacing, radii, shadows } from "../../src/theme";
-import { hapticLight, hapticMedium } from "../../src/services/haptics";
+import { colors, typography, spacing, radii, shadows } from "@/theme";
+import { hapticLight, hapticMedium } from "@/services/haptics";
 
 const AUTOPLAY_KEY = "settings:autoplay";
 

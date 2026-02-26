@@ -14,6 +14,7 @@ module.exports = {
   },
   moduleNameMapper: {
     "^react-native$": "<rootDir>/src/__mocks__/react-native.js",
+    "^@/(.*)$": "<rootDir>/src/$1",
   },
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],
   testMatch: ["**/__tests__/**/*.(ts|tsx)", "**/*.(test|spec).(ts|tsx)"],

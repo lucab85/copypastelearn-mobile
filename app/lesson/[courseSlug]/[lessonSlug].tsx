@@ -15,9 +15,10 @@ import { Video, ResizeMode, type AVPlaybackStatus } from "expo-av";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import * as ScreenOrientation from "expo-screen-orientation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useApiClient } from "../../../src/services/apiClient";
-import { AnalyticsEvent, track } from "../../../src/services/analytics";
-import { hapticSuccess, hapticError, hapticLight } from "../../../src/services/haptics";
+import { useApiClient } from "@/services/apiClient";
+import { AnalyticsEvent, track } from "@/services/analytics";
+import { hapticSuccess, hapticError, hapticLight } from "@/services/haptics";
+import { colors, typography, spacing, radii } from "@/theme";
 
 const SAVE_INTERVAL_MS = 10_000;
 const BUFFERING_DEBOUNCE_MS = 500;
@@ -284,7 +285,7 @@ export default function LessonPlayerScreen() {
   if (isLoading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Loading lesson...</Text>
       </View>
     );
@@ -508,15 +509,15 @@ export default function LessonPlayerScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#000" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" },
-  loadingText: { marginTop: 12, fontSize: 14, color: "#6b7280" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: colors.background },
+  loadingText: { ...typography.bodySm, color: colors.textSecondary, marginTop: spacing.sm },
   video: { width: "100%", aspectRatio: 16 / 9, backgroundColor: "#000" },
   videoLandscape: { aspectRatio: undefined, flex: 1, width: "100%", height: "100%" },
   noVideo: {
     width: "100%", aspectRatio: 16 / 9, backgroundColor: "#1a1a1a",
     justifyContent: "center", alignItems: "center",
   },
-  noVideoText: { color: "#666", fontSize: 16 },
+  noVideoText: { ...typography.body, color: colors.textTertiary },
 
   // Buffering
   bufferingOverlay: {
@@ -529,80 +530,80 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject, aspectRatio: 16 / 9,
     backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", alignItems: "center",
   },
-  errorOverlayIcon: { fontSize: 40, marginBottom: 12 },
-  errorOverlayText: { color: "#fff", fontSize: 16, fontWeight: "600", marginBottom: 16 },
+  errorOverlayIcon: { fontSize: 40, marginBottom: spacing.sm },
+  errorOverlayText: { ...typography.bodyMedium, color: "#fff", marginBottom: spacing.md },
   retryVideoButton: {
-    paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8, backgroundColor: "#2563eb",
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.sm, backgroundColor: colors.primary,
   },
-  retryVideoText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  retryVideoText: { ...typography.button, color: "#fff", fontSize: 15 },
 
   // Resume
   resumeOverlay: {
     ...StyleSheet.absoluteFillObject, aspectRatio: 16 / 9,
     backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", alignItems: "center",
   },
-  resumeText: { color: "#fff", fontSize: 18, fontWeight: "600", marginBottom: 16 },
-  resumeButtons: { flexDirection: "row", gap: 12 },
+  resumeText: { ...typography.h3, color: "#fff", marginBottom: spacing.md },
+  resumeButtons: { flexDirection: "row", gap: spacing.sm },
   resumeButton: {
-    paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.sm,
     borderWidth: 1, borderColor: "#fff",
   },
-  resumeButtonPrimary: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
-  resumeButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  resumeButtonPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  resumeButtonText: { ...typography.button, color: "#fff", fontSize: 15 },
 
   // Completion
   completionOverlay: {
     ...StyleSheet.absoluteFillObject, aspectRatio: 16 / 9,
     backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", alignItems: "center",
   },
-  completionEmoji: { fontSize: 48, marginBottom: 8 },
-  completionTitle: { color: "#fff", fontSize: 22, fontWeight: "700", marginBottom: 4 },
-  completionCheck: { color: "#16a34a", fontSize: 36, fontWeight: "700", marginBottom: 8 },
-  countdownText: { color: "#93c5fd", fontSize: 14, fontWeight: "600", marginBottom: 16 },
-  completionButtons: { gap: 10, alignItems: "center", width: "80%" },
+  completionEmoji: { fontSize: 48, marginBottom: spacing.sm },
+  completionTitle: { ...typography.h2, color: "#fff", marginBottom: 4 },
+  completionCheck: { color: colors.success, fontSize: 36, fontWeight: "700", marginBottom: spacing.sm },
+  countdownText: { color: "#93c5fd", fontSize: 14, fontWeight: "600", marginBottom: spacing.md },
+  completionButtons: { gap: spacing.sm, alignItems: "center", width: "80%" },
   completionBtn: {
-    paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radii.md,
     borderWidth: 1, borderColor: "#fff", width: "100%", alignItems: "center",
   },
-  completionBtnPrimary: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
-  completionBtnText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  completionBtnPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  completionBtnText: { ...typography.button, color: "#fff", fontSize: 15 },
 
   // Controls bar
   controlsBar: {
-    flexDirection: "row", justifyContent: "flex-end", gap: 8,
-    paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#111",
+    flexDirection: "row", justifyContent: "flex-end", gap: spacing.sm,
+    paddingHorizontal: spacing.sm, paddingVertical: 6, backgroundColor: "#111",
   },
   controlButton: {
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6,
+    paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radii.sm,
     backgroundColor: "rgba(255,255,255,0.15)",
   },
-  controlText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  controlText: { ...typography.captionSm, color: "#fff" },
 
   whiteText: { color: "#fff" },
 
   // Content
-  content: { flex: 1, backgroundColor: "#fff", padding: 16 },
-  title: { fontSize: 20, fontWeight: "700", color: "#1a1a1a", marginBottom: 12 },
+  content: { flex: 1, backgroundColor: colors.background, padding: spacing.md },
+  title: { ...typography.h2, color: colors.text, marginBottom: spacing.sm },
   completedBanner: {
-    backgroundColor: "#f0fdf4", borderRadius: 8, padding: 10, marginBottom: 16,
+    backgroundColor: "#f0fdf4", borderRadius: radii.sm, padding: spacing.sm, marginBottom: spacing.md,
   },
-  completedText: { color: "#16a34a", fontWeight: "600", textAlign: "center" },
-  section: { marginBottom: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: "600", color: "#1a1a1a", marginBottom: 8 },
-  transcript: { fontSize: 14, color: "#444", lineHeight: 22 },
-  resourceLink: { fontSize: 14, color: "#2563eb", marginBottom: 6 },
+  completedText: { ...typography.bodyMedium, color: colors.success, textAlign: "center" },
+  section: { marginBottom: spacing.lg },
+  sectionTitle: { ...typography.h4, color: colors.text, marginBottom: spacing.sm },
+  transcript: { ...typography.body, color: colors.textSecondary, lineHeight: 22 },
+  resourceLink: { ...typography.body, color: colors.primary, marginBottom: 6 },
   navButtons: {
     flexDirection: "row", justifyContent: "space-between",
-    marginTop: 16, marginBottom: 32, gap: 12,
+    marginTop: spacing.md, marginBottom: spacing.xxl, gap: spacing.sm,
   },
   navButton: {
-    flex: 1, padding: 14, borderRadius: 12, borderWidth: 1,
-    borderColor: "#ddd", alignItems: "center",
+    flex: 1, padding: 14, borderRadius: radii.md, borderWidth: 1,
+    borderColor: colors.border, alignItems: "center",
   },
-  navButtonPrimary: { backgroundColor: "#2563eb", borderColor: "#2563eb" },
-  navButtonText: { fontSize: 15, fontWeight: "600", color: "#1a1a1a" },
-  errorIcon: { fontSize: 40, marginBottom: 12 },
-  errorText: { fontSize: 16, color: "#dc2626", marginBottom: 12 },
-  retryButton: { padding: 12 },
-  retryText: { color: "#2563eb", fontSize: 16, fontWeight: "600" },
+  navButtonPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  navButtonText: { ...typography.button, color: colors.text, fontSize: 15 },
+  errorIcon: { fontSize: 40, marginBottom: spacing.sm },
+  errorText: { ...typography.body, color: colors.error, marginBottom: spacing.sm },
+  retryButton: { padding: spacing.sm },
+  retryText: { ...typography.button, color: colors.primary },
 });

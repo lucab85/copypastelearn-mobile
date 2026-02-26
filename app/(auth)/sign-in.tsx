@@ -12,7 +12,7 @@ import {
   Platform,
   SafeAreaView,
 } from "react-native";
-import { colors, typography, spacing, radii } from "../../src/theme";
+import { colors, typography, spacing, radii } from "@/theme";
 
 export default function SignInScreen() {
   const { signIn, setActive, isLoaded } = useSignIn();

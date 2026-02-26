@@ -9,13 +9,13 @@ import {
   StyleSheet,
   RefreshControl,
 } from "react-native";
-import { useApiClient } from "../../../src/services/apiClient";
-import { SkeletonBox, SkeletonLessonRow, SkeletonCourseDetail } from "../../../src/components/SkeletonBox";
-import { ProgressBar } from "../../../src/components/ProgressBar";
-import { ProgressRing } from "../../../src/components/ProgressRing";
-import { AnalyticsEvent, track } from "../../../src/services/analytics";
-import { colors, typography, spacing, radii, shadows, getGradientColor } from "../../../src/theme";
-import type { LessonSummary } from "../../../src/services/types";
+import { useApiClient } from "@/services/apiClient";
+import { SkeletonBox, SkeletonLessonRow, SkeletonCourseDetail } from "@/components/SkeletonBox";
+import { ProgressBar } from "@/components/ProgressBar";
+import { ProgressRing } from "@/components/ProgressRing";
+import { AnalyticsEvent, track } from "@/services/analytics";
+import { colors, typography, spacing, radii, shadows, getGradientColor } from "@/theme";
+import type { LessonSummary } from "@/services/types";
 
 export default function CourseDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();

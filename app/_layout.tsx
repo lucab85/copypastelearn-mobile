@@ -2,10 +2,10 @@ import { View, Text, StyleSheet, StatusBar } from "react-native";
 import { Slot } from "expo-router";
 import { ClerkProvider, ClerkLoaded } from "@clerk/clerk-expo";
 import { QueryClient, QueryClientProvider, onlineManager } from "@tanstack/react-query";
-import { tokenCache } from "../src/services/tokenCache";
-import { ErrorBoundary } from "../src/components/ErrorBoundary";
-import { OfflineBanner } from "../src/components/OfflineBanner";
-import { colors, typography, spacing, radii } from "../src/theme";
+import { tokenCache } from "@/services/tokenCache";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { colors, typography, spacing, radii } from "@/theme";
 
 // Sync TanStack Query online status with NetInfo (safe import)
 try {

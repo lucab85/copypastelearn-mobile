@@ -10,14 +10,14 @@ import {
   StyleSheet,
   RefreshControl,
 } from "react-native";
-import { useApiClient } from "../../../src/services/apiClient";
-import { useDebouncedCallback } from "../../../src/hooks/useDebouncedCallback";
-import { SkeletonCatalog } from "../../../src/components/SkeletonBox";
-import { CourseCard } from "../../../src/components/CourseCard";
-import { AnalyticsEvent, track } from "../../../src/services/analytics";
-import { colors, typography, spacing, radii } from "../../../src/theme";
-import { hapticSelection } from "../../../src/services/haptics";
-import type { CourseListItem } from "../../../src/services/types";
+import { useApiClient } from "@/services/apiClient";
+import { useDebouncedCallback } from "@/hooks/useDebouncedCallback";
+import { SkeletonCatalog } from "@/components/SkeletonBox";
+import { CourseCard } from "@/components/CourseCard";
+import { AnalyticsEvent, track } from "@/services/analytics";
+import { colors, typography, spacing, radii } from "@/theme";
+import { hapticSelection } from "@/services/haptics";
+import type { CourseListItem } from "@/services/types";
 
 type FilterType = "all" | "in_progress" | "completed" | "free";
 
