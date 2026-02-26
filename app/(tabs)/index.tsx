@@ -11,14 +11,14 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useApiClient } from "../../../src/services/apiClient";
-import { SkeletonDashboard } from "../../../src/components/SkeletonBox";
-import { HeroCard } from "../../../src/components/HeroCard";
-import { CourseCard } from "../../../src/components/CourseCard";
-import { ProgressBar } from "../../../src/components/ProgressBar";
-import { AnalyticsEvent, track } from "../../../src/services/analytics";
-import { colors, typography, spacing, radii, shadows, getGreeting } from "../../../src/theme";
-import type { DashboardData, DashboardCourse } from "../../../src/services/types";
+import { useApiClient } from "../../src/services/apiClient";
+import { SkeletonDashboard } from "../../src/components/SkeletonBox";
+import { HeroCard } from "../../src/components/HeroCard";
+import { CourseCard } from "../../src/components/CourseCard";
+import { ProgressBar } from "../../src/components/ProgressBar";
+import { AnalyticsEvent, track } from "../../src/services/analytics";
+import { colors, typography, spacing, radii, shadows, getGreeting } from "../../src/theme";
+import type { DashboardData, DashboardCourse } from "../../src/services/types";
 
 export default function DashboardScreen() {
   const api = useApiClient();
